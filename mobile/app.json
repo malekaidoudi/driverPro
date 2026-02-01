@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "DriverPro",
+    "slug": "driverpro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.driverpro.app",
+      "deploymentTarget": "15.5",
+      "config": {
+        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "DriverPro needs camera access to scan addresses and labels.",
+        "NSSpeechRecognitionUsageDescription": "DriverPro uses speech recognition to dictate addresses."
+      }
+    },
+    "android": {
+      "package": "com.driverpro.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        }
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "RECORD_AUDIO"
+      ]
+    },
+    "web": {},
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow DriverPro to use your location to optimize routes."
+        }
+      ],
+      "expo-speech-recognition",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "DriverPro needs camera access to scan addresses and labels.",
+          "enableMicrophonePermission": false,
+          "enableFrameProcessors": true
+        }
+      ]
+    ],
+    "scheme": "driverpro"
+  }
+}
