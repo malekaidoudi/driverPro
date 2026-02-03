@@ -98,17 +98,23 @@ class StopResponse(BaseModel):
     id: str
     route_id: str
     address: str
-    address_complement: Optional[str] = None
     postal_code: Optional[str] = None
     city: Optional[str] = None
     latitude: float
     longitude: float
     notes: Optional[str] = None
     type: StopType = StopType.delivery
-    priority: StopPriority = StopPriority.normal
-    order_preference: OrderPreference = OrderPreference.auto
     estimated_duration_seconds: int = 180
     package_count: int = 1
+    sequence_order: Optional[int] = None
+    status: StopStatus
+    arrival_time: Optional[datetime] = None
+    departure_time: Optional[datetime] = None
+    created_at: datetime
+    # Optional fields - may not exist until migration is run
+    address_complement: Optional[str] = None
+    priority: StopPriority = StopPriority.normal
+    order_preference: OrderPreference = OrderPreference.auto
     package_finder_id: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -118,15 +124,10 @@ class StopResponse(BaseModel):
     package_weight_kg: Optional[float] = None
     package_size: Optional[str] = None
     is_fragile: bool = False
-    sequence_order: Optional[int] = None
-    status: StopStatus
     attempt_count: int = 0
     last_failure_type: Optional[FailureType] = None
     favorite_stop_id: Optional[str] = None
     recurring_stop_id: Optional[str] = None
-    arrival_time: Optional[datetime] = None
-    departure_time: Optional[datetime] = None
-    created_at: datetime
     
     class Config:
         from_attributes = True

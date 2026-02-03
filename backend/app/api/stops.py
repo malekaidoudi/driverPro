@@ -32,10 +32,14 @@ async def create_stop(
 ):
     await verify_route_ownership(route_id, current_user, supabase)
     
-    # Exclude fields not in database schema
+    # Exclude fields not in current database schema (migration not yet run)
     stop_data = stop.model_dump(exclude={
         "first_name", "last_name", "phone_number",
-        "is_favorite", "is_recurring"  # These are flags, not DB columns
+        "is_favorite", "is_recurring",
+        # New fields from migration 002 - exclude until migration is run
+        "address_complement", "order_preference", "package_finder_id",
+        "time_window_start", "time_window_end", "package_weight_kg",
+        "package_size", "is_fragile"
     })
     stop_data["route_id"] = route_id
     
@@ -60,7 +64,10 @@ async def create_stops_batch(
     for stop in batch.stops:
         stop_data = stop.model_dump(exclude={
             "first_name", "last_name", "phone_number",
-            "is_favorite", "is_recurring"
+            "is_favorite", "is_recurring",
+            "address_complement", "order_preference", "package_finder_id",
+            "time_window_start", "time_window_end", "package_weight_kg",
+            "package_size", "is_fragile"
         })
         stop_data["route_id"] = route_id
         stops_data.append(stop_data)
