@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
-import { routesApi } from '../services/api';
-import { RouteGroupedByDate } from '../types';
+import { useAuth } from '../../src/contexts/AuthContext';
+import { useTheme } from '../../src/contexts/ThemeContext';
+import { routesApi } from '../../src/services/api';
+import { RouteGroupedByDate } from '../../src/types';
 import { Plus, MapPin } from 'phosphor-react-native';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -99,50 +99,42 @@ export default function HomeScreen() {
                             <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 12 }}>
                                 {format(new Date(group.date), 'EEEE d MMMM yyyy', { locale: fr }).toUpperCase()}
                             </Text>
-                            {group.routes.map((route) => (
-                                <TouchableOpacity
-                                    key={route.id}
-                                    onPress={() => router.push(`/route/${route.id}`)}
-                                    style={{
-                                        backgroundColor: colors.surface,
-                                        padding: 16,
-                                        borderRadius: 12,
-                                        marginBottom: 12,
-                                    }}
-                                >
-                                    <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textPrimary }}>
-                                        {route.name}
-                                    </Text>
-                                    <View style={{ flexDirection: 'row', marginTop: 8, alignItems: 'center' }}>
-                                        <View
-                                            style={{
+                            {group.routes.map((route) => {
+                                const statusText = route.status === 'draft' ? 'Brouillon' :
+                                    route.status === 'optimized' ? 'Optimisé' :
+                                        route.status === 'in_progress' ? 'En cours' :
+                                            route.status === 'completed' ? 'Terminé' : '';
+                                const statusColor = route.status === 'completed' ? colors.secondary : colors.primary;
+                                const distanceKm = route.total_distance_meters ? (route.total_distance_meters / 1000).toFixed(1) : null;
+
+                                return (
+                                    <TouchableOpacity
+                                        key={route.id}
+                                        onPress={() => router.push(`/route/${route.id}`)}
+                                        style={{
+                                            backgroundColor: colors.surface,
+                                            padding: 16,
+                                            borderRadius: 12,
+                                            marginBottom: 12,
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textPrimary }}>{route.name || 'Sans nom'}</Text>
+                                        <View style={{ flexDirection: 'row', marginTop: 8, alignItems: 'center' }}>
+                                            <View style={{
                                                 paddingHorizontal: 8,
                                                 paddingVertical: 4,
                                                 borderRadius: 6,
-                                                backgroundColor: route.status === 'completed' ? colors.secondary + '20' : colors.primary + '20',
-                                            }}
-                                        >
-                                            <Text
-                                                style={{
-                                                    fontSize: 12,
-                                                    fontWeight: '600',
-                                                    color: route.status === 'completed' ? colors.secondary : colors.primary,
-                                                }}
-                                            >
-                                                {route.status === 'draft' && 'Brouillon'}
-                                                {route.status === 'optimized' && 'Optimisé'}
-                                                {route.status === 'in_progress' && 'En cours'}
-                                                {route.status === 'completed' && 'Terminé'}
-                                            </Text>
+                                                backgroundColor: statusColor + '20',
+                                            }}>
+                                                <Text style={{ fontSize: 12, fontWeight: '600', color: statusColor }}>{statusText}</Text>
+                                            </View>
+                                            {distanceKm !== null && (
+                                                <Text style={{ fontSize: 12, color: colors.textSecondary, marginLeft: 12 }}>{distanceKm} km</Text>
+                                            )}
                                         </View>
-                                        {route.total_distance_meters && (
-                                            <Text style={{ fontSize: 12, color: colors.textSecondary, marginLeft: 12 }}>
-                                                {(route.total_distance_meters / 1000).toFixed(1)} km
-                                            </Text>
-                                        )}
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </View>
                     ))
                 )}

@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
-import { useAuth } from './contexts/AuthContext';
-import { useTheme } from './contexts/ThemeContext';
+import { useAuth } from '../src/contexts/AuthContext';
+import { useTheme } from '../src/contexts/ThemeContext';
 
 export default function Index() {
     const { user, loading } = useAuth();

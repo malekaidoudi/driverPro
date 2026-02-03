@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useTheme } from '../contexts/ThemeContext';
-import { routesApi, stopsApi, servicesApi } from '../services/api';
-import { Route, Stop, StopType, StopPriority } from '../types';
+import { useTheme } from '../../src/contexts/ThemeContext';
+import { routesApi, stopsApi, servicesApi } from '../../src/services/api';
+import { Route, Stop, StopType, StopPriority } from '../../src/types';
 import { ArrowLeft, Plus, Sparkle, Camera } from 'phosphor-react-native';
-import { AddStopBottomSheet, AddStopBottomSheetRef, StopPayload } from '../components/AddStopBottomSheet';
-import OCRScanner from '../components/OCRScannerOptimized';
-import { ParsedOCRData } from '../hooks/useOCRParsing';
+import { AddStopBottomSheet, AddStopBottomSheetRef, StopPayload } from '../../src/components/AddStopBottomSheet';
+import OCRScanner from '../../src/components/OCRScannerOptimized';
+import { ParsedOCRData } from '../../src/hooks/useOCRParsing';
 
 export default function RouteDetailsScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();

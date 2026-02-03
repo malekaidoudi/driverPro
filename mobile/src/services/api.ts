@@ -1,5 +1,20 @@
 import axios from 'axios';
-import { Route, Stop, RouteGroupedByDate, PlacePrediction, PlaceDetails, OcrScanResult, SpeechRecognitionResult } from '../types';
+import {
+    Route,
+    Stop,
+    RouteGroupedByDate,
+    PlacePrediction,
+    PlaceDetails,
+    OcrScanResult,
+    SpeechRecognitionResult,
+    FavoriteStop,
+    FavoriteStopCreateData,
+    RecurringStop,
+    RecurringStopCreateData,
+    DeliveryAttempt,
+    DeliveryFailureData,
+    DeliveryFailureResult,
+} from '../types';
 import Constants from 'expo-constants';
 
 const API_URL = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
@@ -97,6 +112,68 @@ export const stopsApi = {
 
     delete: async (routeId: string, stopId: string): Promise<void> => {
         await api.delete(`/routes/${routeId}/stops/${stopId}`);
+    },
+
+    recordFailure: async (stopId: string, data: DeliveryFailureData): Promise<DeliveryFailureResult> => {
+        const response = await api.post(`/stops/${stopId}/fail`, data);
+        return response.data;
+    },
+
+    getAttempts: async (stopId: string): Promise<DeliveryAttempt[]> => {
+        const response = await api.get(`/stops/${stopId}/attempts`);
+        return response.data;
+    },
+};
+
+export const favoriteStopsApi = {
+    getAll: async (): Promise<FavoriteStop[]> => {
+        const response = await api.get('/favorite-stops');
+        return response.data;
+    },
+
+    create: async (data: FavoriteStopCreateData): Promise<FavoriteStop> => {
+        const response = await api.post('/favorite-stops', data);
+        return response.data;
+    },
+
+    update: async (stopId: string, data: Partial<FavoriteStopCreateData>): Promise<FavoriteStop> => {
+        const response = await api.put(`/favorite-stops/${stopId}`, data);
+        return response.data;
+    },
+
+    delete: async (stopId: string): Promise<void> => {
+        await api.delete(`/favorite-stops/${stopId}`);
+    },
+
+    addToRoute: async (stopId: string, routeId: string, options?: { package_count?: number; order_preference?: string; notes?: string }): Promise<Stop> => {
+        const response = await api.post(`/favorite-stops/${stopId}/add-to-route/${routeId}`, options || {});
+        return response.data;
+    },
+};
+
+export const recurringStopsApi = {
+    getAll: async (): Promise<RecurringStop[]> => {
+        const response = await api.get('/recurring-stops');
+        return response.data;
+    },
+
+    create: async (data: RecurringStopCreateData): Promise<RecurringStop> => {
+        const response = await api.post('/recurring-stops', data);
+        return response.data;
+    },
+
+    update: async (stopId: string, data: Partial<RecurringStopCreateData>): Promise<RecurringStop> => {
+        const response = await api.put(`/recurring-stops/${stopId}`, data);
+        return response.data;
+    },
+
+    delete: async (stopId: string): Promise<void> => {
+        await api.delete(`/recurring-stops/${stopId}`);
+    },
+
+    toggle: async (stopId: string, isActive: boolean): Promise<RecurringStop> => {
+        const response = await api.patch(`/recurring-stops/${stopId}`, { is_active: isActive });
+        return response.data;
     },
 };
 

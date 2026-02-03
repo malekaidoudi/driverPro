@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../../src/contexts/ThemeContext';
+import { useAuth } from '../../src/contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { CaretRight, Moon, Sun, DeviceMobile, SignOut } from 'phosphor-react-native';
 

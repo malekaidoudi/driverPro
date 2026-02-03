@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useTheme } from './contexts/ThemeContext';
-import { routesApi } from './services/api';
+import { useTheme } from '../src/contexts/ThemeContext';
+import { routesApi } from '../src/services/api';
 
 export default function CreateRouteScreen() {
     const { colors } = useTheme();

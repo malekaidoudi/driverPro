@@ -1,5 +1,5 @@
 import { View, Text } from 'react-native';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from '../../src/contexts/ThemeContext';
 
 export default function RoutesScreen() {
     const { colors } = useTheme();

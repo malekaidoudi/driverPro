@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme } from '../../src/contexts/ThemeContext';
 import { House, MapTrifold, Gear } from 'phosphor-react-native';
 
 export default function TabsLayout() {

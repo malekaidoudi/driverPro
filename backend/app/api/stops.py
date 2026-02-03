@@ -32,7 +32,11 @@ async def create_stop(
 ):
     await verify_route_ownership(route_id, current_user, supabase)
     
-    stop_data = stop.model_dump(exclude={"first_name", "last_name", "phone_number"})
+    # Exclude fields not in database schema
+    stop_data = stop.model_dump(exclude={
+        "first_name", "last_name", "phone_number",
+        "is_favorite", "is_recurring"  # These are flags, not DB columns
+    })
     stop_data["route_id"] = route_id
     
     response = supabase.table("stops").insert(stop_data).execute()
@@ -54,7 +58,10 @@ async def create_stops_batch(
     
     stops_data = []
     for stop in batch.stops:
-        stop_data = stop.model_dump(exclude={"first_name", "last_name", "phone_number"})
+        stop_data = stop.model_dump(exclude={
+            "first_name", "last_name", "phone_number",
+            "is_favorite", "is_recurring"
+        })
         stop_data["route_id"] = route_id
         stops_data.append(stop_data)
     

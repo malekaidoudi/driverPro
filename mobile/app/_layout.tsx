@@ -4,8 +4,8 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { PortalProvider } from '@gorhom/portal';
-import { AuthProvider } from './contexts/AuthContext';
-import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { AuthProvider } from '../src/contexts/AuthContext';
+import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 
