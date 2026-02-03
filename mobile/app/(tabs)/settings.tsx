@@ -123,15 +123,15 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                     onPress={handleSignOut}
                     style={{
-                        backgroundColor: colors.error + '20',
+                        backgroundColor: colors.danger + '20',
                         padding: 16,
                         borderRadius: 12,
                         flexDirection: 'row',
                         alignItems: 'center',
                     }}
                 >
-                    <SignOut size={24} color={colors.error} />
-                    <Text style={{ fontSize: 16, color: colors.error, marginLeft: 12, fontWeight: '600' }}>
+                    <SignOut size={24} color={colors.danger} />
+                    <Text style={{ fontSize: 16, color: colors.danger, marginLeft: 12, fontWeight: '600' }}>
                         Déconnexion
                     </Text>
                 </TouchableOpacity>

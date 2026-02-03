@@ -15,6 +15,8 @@ class RouteStatus(str, Enum):
 class RouteBase(BaseModel):
     name: str
     route_date: date
+    start_address: Optional[str] = None
+    end_address: Optional[str] = None
 
 
 class RouteCreate(RouteBase):
@@ -25,6 +27,8 @@ class RouteUpdate(BaseModel):
     name: Optional[str] = None
     route_date: Optional[date] = None
     status: Optional[RouteStatus] = None
+    start_address: Optional[str] = None
+    end_address: Optional[str] = None
     total_distance_meters: Optional[int] = None
     total_duration_seconds: Optional[int] = None
 
@@ -33,6 +37,8 @@ class RouteResponse(RouteBase):
     id: str
     user_id: str
     status: RouteStatus
+    start_address: Optional[str] = None
+    end_address: Optional[str] = None
     total_distance_meters: Optional[int] = None
     total_duration_seconds: Optional[int] = None
     created_at: datetime

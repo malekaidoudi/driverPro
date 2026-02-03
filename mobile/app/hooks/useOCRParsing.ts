@@ -9,7 +9,17 @@
  * 5. Combine into full address
  * 
  * Optimized for French delivery labels
+ * 
+ * PERFORMANCE: Set DEBUG_OCR=false for production (removes log)
  */
+
+// ============================================================================
+// PERFORMANCE FLAGS
+// ============================================================================
+const DEBUG_OCR = true; // Force logs ON for debugging precision issues
+
+// Optimized logging function (no-op in production)
+const log: (...args: any[]) => void = DEBUG_OCR ? console.log.bind(console) : () => { };
 
 export interface ParsedOCRData {
     address: string | null;        // Full combined address
@@ -111,13 +121,19 @@ const COMMON_FIRST_NAMES = new Set([
     'bruno', 'didier', 'stéphane', 'stephane', 'thierry', 'bernard',
     'jacques', 'daniel', 'marc', 'paul', 'louis', 'antoine', 'alexandre',
     'maxime', 'lucas', 'hugo', 'théo', 'theo', 'nathan', 'léo', 'leo',
-    'mohamed', 'ahmed', 'karim', 'mehdi', 'youssef', 'omar', 'ali',
+    'mohamed', 'ahmed', 'karim', 'mehdi', 'youssef', 'omar', 'ali', 'malek', 'amine', 'khalid', 'rachid', 'said', 'nabil',
     // Female
     'marie', 'sophie', 'nathalie', 'isabelle', 'catherine', 'sylvie', 'anne',
     'christine', 'monique', 'françoise', 'francoise', 'valérie', 'valerie',
     'sandrine', 'céline', 'celine', 'véronique', 'veronique', 'patricia',
     'martine', 'julie', 'camille', 'léa', 'lea', 'emma', 'chloé', 'chloe',
     'sarah', 'laura', 'manon', 'océane', 'oceane', 'fatima', 'amina',
+    'fabienne', 'corinne', 'brigitte', 'dominique', 'florence', 'laurence',
+    'stéphanie', 'stephanie', 'aurélie', 'aurelie', 'elodie', 'mélanie', 'melanie',
+    // OCR variations and additional names
+    'tarienne', 'fabienne', 'adrienne', 'vivienne', 'etienne', 'julienne',
+    'christiane', 'mariane', 'marianne', 'suzanne', 'jeanne', 'liliane',
+    'renne', 'lansard', 'langard', 'landard', // Common OCR errors for names
 ]);
 
 // ============================================================================
@@ -144,6 +160,44 @@ function splitLines(text: string): string[] {
         .split('\n')
         .map(l => l.trim())
         .filter(l => l.length > 0);
+}
+
+/**
+ * Clean city name: remove country names, garbage text, normalize
+ */
+function cleanCityName(rawCity: string): string | null {
+    if (!rawCity) return null;
+
+    let city = rawCity.trim();
+
+    // Remove common trailing garbage (country names, OCR artifacts)
+    const trailingGarbage = [
+        /\s+FRANCE\b.*$/i,
+        /\s+FRA\b.*$/i,
+        /\s+FR\b.*$/i,
+        /\s+CEDEX\b.*$/i,
+        /\s+v\s+Aav.*$/i,
+        /\s+Contad\s+Tel.*$/i,
+        /\s+Tel\s+Ret.*$/i,
+        /\s+CONTACT.*$/i,
+        /\s+[A-Z]{2,}\s*$/,  // Trailing 2+ uppercase letters (country codes)
+        /\s+\d+\s*$/,        // Trailing numbers
+    ];
+
+    for (const pattern of trailingGarbage) {
+        city = city.replace(pattern, '');
+    }
+
+    // Remove special characters but keep hyphens and apostrophes
+    city = city.replace(/[^A-Za-zÀ-ÿ\-\s']/g, '').trim();
+
+    // Normalize multiple spaces and hyphens
+    city = city.replace(/\s+/g, ' ').replace(/-+/g, '-').trim();
+
+    // Remove leading/trailing hyphens
+    city = city.replace(/^-+|-+$/g, '').trim();
+
+    return city.length >= 2 ? city : null;
 }
 
 /**
@@ -207,13 +261,11 @@ function extractPostalCodeAndCity(lines: string[]): {
                 // Validate postal code (French departments 01-95, 97x for overseas)
                 const dept = parseInt(postalCode.substring(0, 2));
                 if ((dept >= 1 && dept <= 95) || (dept >= 971 && dept <= 976)) {
-                    // Clean city name (remove trailing numbers, special chars)
-                    let city = match[2].trim();
-                    city = city.replace(/\s*\d+$/, '').trim(); // Remove trailing numbers
-                    city = city.replace(/[^A-Za-zÀ-ÿ\-\s']/g, '').trim(); // Keep only letters
+                    // Clean city name
+                    let city = cleanCityName(match[2]);
 
-                    if (city.length >= 2) {
-                        console.log(`[POSTAL] Found: ${postalCode} ${city} (pattern ${patterns.indexOf(regex)})`);
+                    if (city && city.length >= 2) {
+                        log(`[POSTAL] Found: ${postalCode} ${city} (pattern ${patterns.indexOf(regex)})`);
                         return {
                             postalCode: postalCode,
                             city: city,
@@ -247,7 +299,7 @@ function extractPostalCodeAndCity(lines: string[]): {
                         if (/^[A-ZÀ-Ÿ][a-zà-ÿ]+(?:-[A-ZÀ-Ÿ]?[a-zà-ÿ]+)*$/.test(prevLine) &&
                             prevLine.length >= 2 && prevLine.length <= 25) {
                             city = prevLine;
-                            console.log(`[POSTAL] City found on previous line: ${city}`);
+                            log(`[POSTAL] City found on previous line: ${city}`);
                         }
                     }
                     // Check line after postal code
@@ -256,12 +308,12 @@ function extractPostalCodeAndCity(lines: string[]): {
                         if (/^[A-ZÀ-Ÿ][a-zà-ÿ]+(?:-[A-ZÀ-Ÿ]?[a-zà-ÿ]+)*$/.test(nextLine) &&
                             nextLine.length >= 2 && nextLine.length <= 25) {
                             city = nextLine;
-                            console.log(`[POSTAL] City found on next line: ${city}`);
+                            log(`[POSTAL] City found on next line: ${city}`);
                         }
                     }
                 }
 
-                console.log(`[POSTAL] Fallback found: ${postalCode} ${city}`);
+                log(`[POSTAL] Fallback found: ${postalCode} ${city}`);
                 return {
                     postalCode: postalCode,
                     city: city,
@@ -283,8 +335,9 @@ function extractStreet(lines: string[], postalLineIndex: number): {
     street: string | null;
     lineIndex: number;
 } {
-    // Street type keywords (French)
-    const streetTypes = 'rue|avenue|av|boulevard|bd|bld|place|allée|allee|chemin|impasse|route|passage|square|cours|quai|voie|résidence|residence|lotissement|hameau|lieu-dit|lieudit';
+    // Street type keywords (French) - including common OCR errors
+    // ATE = ROUTE (OCR error), RTE = ROUTE abbreviation
+    const streetTypes = 'rue|avenue|av|boulevard|bd|bld|place|allée|allee|chemin|impasse|route|rte|ate|passage|square|cours|quai|voie|résidence|residence|lotissement|hameau|lieu-dit|lieudit';
     const streetTypesRegex = new RegExp(`(?:${streetTypes})`, 'i');
 
     // Pattern 1: Number + street type (e.g., "20 Avenue Maréchal Foch")
@@ -307,7 +360,7 @@ function extractStreet(lines: string[], postalLineIndex: number): {
         if (postalMatch && postalMatch.index !== undefined && postalMatch.index > 0) {
             const beforePostal = postalLine.substring(0, postalMatch.index).trim();
             if (beforePostal.length >= 5 && streetTypesRegex.test(beforePostal)) {
-                console.log(`[STREET] Same-line extraction: ${beforePostal}`);
+                log(`[STREET] Same-line extraction: ${beforePostal}`);
                 return { street: beforePostal, lineIndex: postalLineIndex };
             }
         }
@@ -319,11 +372,11 @@ function extractStreet(lines: string[], postalLineIndex: number): {
         const line = lines[i];
 
         if (streetRegex1.test(line)) {
-            console.log(`[STREET] Pattern 1 matched: ${line}`);
+            log(`[STREET] Pattern 1 matched: ${line}`);
             return { street: line.trim(), lineIndex: i };
         }
         if (streetRegex2.test(line)) {
-            console.log(`[STREET] Pattern 2 matched: ${line}`);
+            log(`[STREET] Pattern 2 matched: ${line}`);
             return { street: line.trim(), lineIndex: i };
         }
     }
@@ -334,11 +387,11 @@ function extractStreet(lines: string[], postalLineIndex: number): {
         const line = lines[i];
 
         if (streetRegex3.test(line)) {
-            console.log(`[STREET] Pattern 3 matched: ${line}`);
+            log(`[STREET] Pattern 3 matched: ${line}`);
             return { street: line.trim(), lineIndex: i };
         }
         if (streetRegex4.test(line) && line.length > 8) {
-            console.log(`[STREET] Pattern 4 matched: ${line}`);
+            log(`[STREET] Pattern 4 matched: ${line}`);
             return { street: line.trim(), lineIndex: i };
         }
     }
@@ -349,7 +402,7 @@ function extractStreet(lines: string[], postalLineIndex: number): {
             const line = lines[i];
             // Line starts with number and has reasonable length
             if (/^\d{1,4}[\s,]+[A-ZÀ-ÿa-z]/.test(line) && line.length > 8) {
-                console.log(`[STREET] Fallback matched: ${line}`);
+                log(`[STREET] Fallback matched: ${line}`);
                 return { street: line.trim(), lineIndex: i };
             }
         }
@@ -360,8 +413,56 @@ function extractStreet(lines: string[], postalLineIndex: number): {
         if (i === postalLineIndex) continue;
         const line = lines[i];
         if (/^\d{1,4}\s+[A-Za-zÀ-ÿ]/.test(line) && line.length > 10 && line.length < 60) {
-            console.log(`[STREET] Last resort matched: ${line}`);
+            log(`[STREET] Last resort matched: ${line}`);
             return { street: line.trim(), lineIndex: i };
+        }
+    }
+
+    // INLINE EXTRACTION: Find street pattern WITHIN long lines (OCR often concatenates)
+    // Pattern: "13 RUE BLAISE PASCAL" or "159 ROUTE DE BRIGNAIS" embedded in text
+    const inlineStreetRegex = new RegExp(
+        `(\\d{1,4})\\s+(${streetTypes})\\s+(?:DE\\s+(?:LA\\s+)?|DU\\s+|DES\\s+|D')?([A-ZÀ-Ÿ][A-Za-zÀ-ÿ\\s\\-']{2,25})`,
+        'gi'
+    );
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const matches = [...line.matchAll(inlineStreetRegex)];
+        if (matches.length > 0) {
+            // Take the best match (prefer one before postal code)
+            for (const match of matches) {
+                const streetNum = match[1];
+                let streetType = match[2].toUpperCase();
+                // Fix OCR errors
+                if (streetType === 'ATE') streetType = 'ROUTE';
+                if (streetType === 'RTE') streetType = 'ROUTE';
+
+                let streetName = match[3].trim();
+                // Clean up street name - stop at postal code or garbage
+                streetName = streetName.replace(/\s+F\s*-?\s*$/, '').trim();
+                streetName = streetName.replace(/\s+\d{5}.*$/, '').trim();
+                streetName = streetName.replace(/\s+[A-Z]{2,3}\s*$/, '').trim();
+
+                if (streetName.length >= 2) {
+                    const preposition = match[0].match(/\s+(DE\s+(?:LA\s+)?|DU\s+|DES\s+|D')/i)?.[1] || '';
+                    const fullStreet = `${streetNum} ${streetType} ${preposition}${streetName}`.replace(/\s+/g, ' ').trim();
+                    log(`[STREET] Inline extraction: ${fullStreet}`);
+                    return { street: fullStreet, lineIndex: i };
+                }
+            }
+        }
+    }
+
+    // LAST RESORT: Find just a street number before postal code (e.g., "134 69660")
+    // This handles labels where address is just a number
+    if (postalLineIndex >= 0) {
+        const postalLine = lines[postalLineIndex];
+        // Look for pattern: "NAME NAME 134 69660" - extract "134" as street number
+        const numberBeforePostalPattern = /\b(\d{1,4})\s+\d{5}\b/;
+        const match = postalLine.match(numberBeforePostalPattern);
+        if (match) {
+            log(`[STREET] Number before postal found: ${match[1]}`);
+            return { street: match[1], lineIndex: postalLineIndex };
         }
     }
 
@@ -382,54 +483,82 @@ function extractStreet(lines: string[], postalLineIndex: number): {
  * - Other cases: require keyword or short line
  */
 function extractPhone(lines: string[]): string | null {
-    // Phone keyword prefixes (for voice input reliability)
-    const phoneKeywords = ['téléphone', 'telephone', 'tél', 'tel', 'phone', 'portable', 'mobile', 'numéro', 'numero'];
+    // PRIORITY 1: Look for "TEL:" or "CONTACT:" followed by number (most reliable on labels)
+    const telKeywordPattern = /(?:TEL|TELEPHONE|CONTACT)\s*[:\s]\s*(\+?33|0)?(\d[\d\s.\-\/]{8,14})/i;
 
-    // Phone regex patterns
-    const phonePatterns = [
-        /(\+33|0033)\s*[1-9](?:[\s.\-\/]?\d{2}){4}/,  // International
-        /0\s*[1-9](?:[\s.\-\/]?\d{2}){4}/,             // National
+    for (const line of lines) {
+        const match = line.match(telKeywordPattern);
+        if (match) {
+            let phone = (match[1] || '') + match[2];
+            phone = phone.replace(/[\s.\-\/]/g, '');
+            // Normalize to +33 format
+            if (phone.startsWith('33') && !phone.startsWith('+')) {
+                phone = '+' + phone;
+            } else if (phone.startsWith('0') && phone.length === 10) {
+                phone = '+33' + phone.slice(1);
+            } else if (!phone.startsWith('+') && phone.length === 9) {
+                phone = '+33' + phone;
+            }
+            // Validate: French phone should be +33 + 9 digits
+            if (phone.match(/^\+33[1-9]\d{8}$/)) {
+                log(`[PHONE] TEL keyword detected: ${phone}`);
+                return phone;
+            }
+        }
+    }
+
+    // PRIORITY 2: International format (0033/+33) - more permissive for OCR errors
+    // Pattern allows optional 0 after 0033 (common OCR concatenation issue)
+    const internationalPatterns = [
+        /(\+33|0033)\s*0?\s*[1-9](?:[\s.\-\/]?\d{2}){4}/,  // Standard with optional leading 0
+        /(\+33|0033)\s*\d{9,10}/,  // Compact format (all digits together)
     ];
+    for (const pattern of internationalPatterns) {
+        for (const line of lines) {
+            const match = line.match(pattern);
+            if (match) {
+                let phone = match[0].replace(/[\s.\-\/]/g, '');
+                // Remove 0033 prefix and normalize
+                if (phone.startsWith('0033')) {
+                    phone = phone.slice(4);
+                } else if (phone.startsWith('+33')) {
+                    phone = phone.slice(3);
+                }
+                // Remove leading 0 if present (0033 0 6 12...)
+                if (phone.startsWith('0') && phone.length > 9) {
+                    phone = phone.slice(1);
+                }
+                // Validate length and format
+                if (phone.length === 9 && /^[1-9]\d{8}$/.test(phone)) {
+                    phone = '+33' + phone;
+                    log(`[PHONE] International detected: ${phone}`);
+                    return phone;
+                }
+            }
+        }
+    }
 
-    // French phone pattern at end of line (01-09 xxx) - can detect without keyword
+    // PRIORITY 3: National format with context (keyword or short line)
+    const phoneKeywords = ['téléphone', 'telephone', 'tél', 'portable', 'mobile', 'numéro', 'numero'];
+    const nationalPattern = /0\s*[1-9](?:[\s.\-\/]?\d{2}){4}/;
     const phoneAtEndPattern = /0\s*[1-9](?:[\s.\-\/]?\d{2}){4}\s*$/;
 
     for (const line of lines) {
         const lower = line.toLowerCase();
-
-        // Check if line contains a phone keyword
         const hasKeyword = phoneKeywords.some(kw => lower.includes(kw));
-
-        // Check if there's a phone number at the end of the line
         const hasPhoneAtEnd = phoneAtEndPattern.test(line);
+        const isShortLine = line.length < 40;
 
-        // Allow detection if:
-        // 1. Has keyword (téléphone, tel, etc.)
-        // 2. Line is short (<30 chars) - likely OCR with phone on its own line
-        // 3. Phone number (01-09) at end of line - common voice pattern
-        const isShortLine = line.length < 30;
-        const allowDetection = hasKeyword || isShortLine || hasPhoneAtEnd;
+        if (!hasKeyword && !isShortLine && !hasPhoneAtEnd) continue;
 
-        if (!allowDetection) continue;
-
-        for (const pattern of phonePatterns) {
-            const match = line.match(pattern);
-            if (match) {
-                // Clean and normalize (remove spaces, dots, dashes, slashes)
-                let phone = match[0].replace(/[\s.\-\/]/g, '');
-
-                // Convert to international format
-                if (phone.startsWith('0') && phone.length === 10) {
-                    phone = '+33' + phone.slice(1);
-                } else if (phone.startsWith('0033')) {
-                    phone = '+33' + phone.slice(4);
-                } else if (!phone.startsWith('+')) {
-                    phone = '+' + phone;
-                }
-
-                console.log(`[PHONE] Detected: ${phone} (keyword: ${hasKeyword}, short: ${isShortLine}, phoneEnd: ${hasPhoneAtEnd})`);
-                return phone;
+        const match = line.match(nationalPattern);
+        if (match) {
+            let phone = match[0].replace(/[\s.\-\/]/g, '');
+            if (phone.startsWith('0') && phone.length === 10) {
+                phone = '+33' + phone.slice(1);
             }
+            log(`[PHONE] National detected: ${phone}`);
+            return phone;
         }
     }
     return null;
@@ -552,6 +681,70 @@ function extractName(
         }
     }
 
+    // INLINE EXTRACTION: Find name pattern WITHIN long lines (OCR often concatenates)
+    // Look for patterns like "FABIENNE LANSARD" or "MALEK AIDOUDI"
+    if (!bestCandidate.firstName && !bestCandidate.lastName) {
+        // Common non-name words to exclude
+        const excludeWords = new Set([
+            'UPS', 'DHL', 'DPD', 'FRA', 'EUR', 'COD', 'EDI', 'STANDARD', 'TRACKING', 'BILLING',
+            'CHEQUE', 'PAIEMENT', 'REFERENCE', 'SHIP', 'MONT', 'FRANCE', 'LYON', 'PARIS',
+            'RUE', 'AVENUE', 'ROUTE', 'BOULEVARD', 'PLACE', 'CEDEX', 'CONTACT', 'NET',
+            'CAPITAL', 'WEIGHT', 'DATE', 'SAVER', 'RACKING', 'PREDICT', 'PREP', 'COLIS',
+            'TRA', 'RET', 'INTO', 'POIDS', 'TOUS', 'MOYENS', 'ACCEPTES', 'NANTE', 'CONTAD',
+            'WHATSAPP', 'ZOOM', 'HIGHLIGHT', 'VIEW', 'IMAGE', 'TERRENE', 'TERTENT'
+        ]);
+
+        // Pattern 1: Look for known first name followed by another word (most reliable)
+        const knownNamePattern = /\b([A-Z][A-Za-z]+)\s+([A-Z][A-Za-z]+)\b/g;
+
+        for (const line of lines) {
+            const matches = [...line.matchAll(knownNamePattern)];
+            for (const match of matches) {
+                const word1 = match[1];
+                const word2 = match[2];
+                const word1Lower = word1.toLowerCase();
+
+                // Skip if either word is excluded
+                if (excludeWords.has(word1.toUpperCase()) || excludeWords.has(word2.toUpperCase())) continue;
+
+                // Check if first word is a known first name
+                if (COMMON_FIRST_NAMES.has(word1Lower)) {
+                    bestCandidate = {
+                        firstName: word1.charAt(0).toUpperCase() + word1.slice(1).toLowerCase(),
+                        lastName: word2.charAt(0).toUpperCase() + word2.slice(1).toLowerCase(),
+                    };
+                    log(`[NAME] Inline known name extraction: ${bestCandidate.firstName} ${bestCandidate.lastName}`);
+                    break;
+                }
+            }
+            if (bestCandidate.firstName) break;
+        }
+
+        // Pattern 2: Look for 2 uppercase words before a number (common on labels: "FABIENNE LANSARD 134")
+        if (!bestCandidate.firstName) {
+            const nameBeforeNumberPattern = /\b([A-Z]{2,}[A-Za-z]*)\s+([A-Z]{2,}[A-Za-z]*)\s+\d{1,4}\b/g;
+            for (const line of lines) {
+                const matches = [...line.matchAll(nameBeforeNumberPattern)];
+                for (const match of matches) {
+                    const word1 = match[1];
+                    const word2 = match[2];
+
+                    // Skip if either word is excluded or too short
+                    if (excludeWords.has(word1.toUpperCase()) || excludeWords.has(word2.toUpperCase())) continue;
+                    if (word1.length < 3 || word2.length < 3) continue;
+
+                    bestCandidate = {
+                        firstName: word1.charAt(0).toUpperCase() + word1.slice(1).toLowerCase(),
+                        lastName: word2.charAt(0).toUpperCase() + word2.slice(1).toLowerCase(),
+                    };
+                    log(`[NAME] Name before number extraction: ${bestCandidate.firstName} ${bestCandidate.lastName}`);
+                    break;
+                }
+                if (bestCandidate.firstName) break;
+            }
+        }
+    }
+
     return bestCandidate;
 }
 
@@ -608,7 +801,7 @@ function extractAddressAnnex(lines: string[], usedLineIndices: Set<number>, stre
     const uniqueParts = [...new Set(annexParts)];
     const result = uniqueParts.join(', ');
 
-    console.log(`[PARSE] AddressAnnex: ${result}`);
+    log(`[PARSE] AddressAnnex: ${result}`);
     return result;
 }
 
@@ -664,7 +857,7 @@ function extractCompanyName(
                 }
 
                 if (companyName.length >= 3) {
-                    console.log(`[PARSE] Company detected (keyword: ${keyword}): ${companyName}`);
+                    log(`[PARSE] Company detected (keyword: ${keyword}): ${companyName}`);
                     return {
                         companyName,
                         isCompany: true,
@@ -706,13 +899,13 @@ export function parseOCRText(rawText: string): ParsedOCRData {
     const usedLineIndices = new Set<number>();
 
     // DEBUG: Log raw text
-    console.log('--- TEXTE BRUT (original) ---');
-    console.log(rawText);
-    console.log('--- TEXTE NORMALISÉ ---');
-    console.log(normalizedText);
-    console.log('--- LIGNES PARSÉES ---');
-    lines.forEach((l, i) => console.log(`[${i}] ${l}`));
-    console.log('------------------------');
+    log('--- TEXTE BRUT (original) ---');
+    log(rawText);
+    log('--- TEXTE NORMALISÉ ---');
+    log(normalizedText);
+    log('--- LIGNES PARSÉES ---');
+    lines.forEach((l, i) => log(`[${i}] ${l}`));
+    log('------------------------');
 
     // 1. Extract phone FIRST (to avoid confusion with address numbers)
     const phoneNumber = extractPhone(lines);
@@ -729,19 +922,19 @@ export function parseOCRText(rawText: string): ParsedOCRData {
             }
         }
     }
-    console.log(`[PARSE] Phone: ${phoneNumber} (line ${phoneLineIndex})`);
+    log(`[PARSE] Phone: ${phoneNumber} (line ${phoneLineIndex})`);
 
     // 2. Extract postal code + city (most reliable anchor)
     const { postalCode, city: cityFromPostal, lineIndex: postalLineIndex } = extractPostalCodeAndCity(lines);
     if (postalLineIndex >= 0) usedLineIndices.add(postalLineIndex);
 
-    console.log(`[PARSE] PostalCode: ${postalCode}, City: ${cityFromPostal}`);
+    log(`[PARSE] PostalCode: ${postalCode}, City: ${cityFromPostal}`);
 
     // 3. Extract street
     const { street, lineIndex: streetLineIndex } = extractStreet(lines, postalLineIndex);
     if (streetLineIndex >= 0) usedLineIndices.add(streetLineIndex);
 
-    console.log(`[PARSE] Street: ${street}`);
+    log(`[PARSE] Street: ${street}`);
 
     // 4. If no postal code found, try to extract city from remaining lines
     let city = cityFromPostal;
@@ -771,7 +964,7 @@ export function parseOCRText(rawText: string): ParsedOCRData {
                 if (!excludedWords.some(w => lower.includes(w))) {
                     city = line;
                     usedLineIndices.add(i);
-                    console.log(`[PARSE] City extracted without postal: ${city}`);
+                    log(`[PARSE] City extracted without postal: ${city}`);
                     break;
                 }
             }
@@ -782,7 +975,7 @@ export function parseOCRText(rawText: string): ParsedOCRData {
     const { companyName, isCompany, lineIndex: companyLineIndex } = extractCompanyName(lines, usedLineIndices);
     if (companyLineIndex >= 0) usedLineIndices.add(companyLineIndex);
 
-    console.log(`[PARSE] Company: ${companyName} (isCompany: ${isCompany})`);
+    log(`[PARSE] Company: ${companyName} (isCompany: ${isCompany})`);
 
     // 5. Extract individual name from remaining lines (only if not a company)
     let firstName: string | null = null;
@@ -793,7 +986,7 @@ export function parseOCRText(rawText: string): ParsedOCRData {
         lastName = nameResult.lastName;
     }
 
-    console.log(`[PARSE] Name: ${firstName} ${lastName}`);
+    log(`[PARSE] Name: ${firstName} ${lastName}`);
 
     // 6. Extract address annex (bâtiment, villa, lotissement, etc.)
     const addressAnnex = extractAddressAnnex(lines, usedLineIndices, street);
@@ -811,7 +1004,7 @@ export function parseOCRText(rawText: string): ParsedOCRData {
         if (/^\d{1,4}$/.test(line)) {
             streetNumber = line;
             usedLineIndices.add(i);
-            console.log(`[PARSE] Street number found: ${streetNumber}`);
+            log(`[PARSE] Street number found: ${streetNumber}`);
             break;
         }
     }
@@ -839,7 +1032,7 @@ export function parseOCRText(rawText: string): ParsedOCRData {
             if (nameParts.length >= 2) {
                 firstName = nameParts[0];
                 lastName = nameParts.slice(1).join(' ');
-                console.log(`[PARSE] Name extracted before phone: ${firstName} ${lastName}`);
+                log(`[PARSE] Name extracted before phone: ${firstName} ${lastName}`);
             }
         }
 
@@ -868,7 +1061,7 @@ export function parseOCRText(rawText: string): ParsedOCRData {
         address = addressParts.join(', ');
     }
 
-    console.log(`[PARSE] Full Address: ${address}`);
+    log(`[PARSE] Full Address: ${address}`);
 
     // Calculate confidence based on what we found
     let confidence = 0;

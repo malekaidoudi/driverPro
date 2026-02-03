@@ -139,6 +139,32 @@ async def optimize_route(
     start_location: Tuple[float, float] = None,
     end_location: Tuple[float, float] = None
 ) -> Dict:
+    """
+    Optimize route with support for order_preference:
+    - 'first': Stop must be at the beginning of the route
+    - 'auto': Stop can be placed anywhere (default)
+    - 'last': Stop must be at the end of the route
+    """
+    # Separate stops by order preference
+    first_stops = [s for s in stops if s.get('order_preference') == 'first']
+    auto_stops = [s for s in stops if s.get('order_preference', 'auto') == 'auto']
+    last_stops = [s for s in stops if s.get('order_preference') == 'last']
+    
+    # If all stops are fixed (first or last), no optimization needed for middle
+    if not auto_stops:
+        # Just order: first_stops + last_stops
+        result_stops = []
+        for i, stop in enumerate(first_stops + last_stops):
+            stop_copy = stop.copy()
+            stop_copy['sequence_order'] = i + 1
+            result_stops.append(stop_copy)
+        return {
+            'stops': result_stops,
+            'total_distance_meters': 0,
+            'total_duration_seconds': 0
+        }
+    
+    # Build locations for optimization (only auto stops)
     locations = []
     
     if start_location:
@@ -147,7 +173,7 @@ async def optimize_route(
     else:
         start_index = 0
     
-    for stop in stops:
+    for stop in auto_stops:
         locations.append((stop['latitude'], stop['longitude']))
     
     if end_location and end_location != start_location:
@@ -164,7 +190,8 @@ async def optimize_route(
     if not solution:
         return None
     
-    optimized_stops = []
+    # Build optimized auto stops
+    optimized_auto_stops = []
     offset = 1 if start_location else 0
     
     for i, node_index in enumerate(solution['route']):
@@ -172,13 +199,33 @@ async def optimize_route(
             continue
         
         stop_index = node_index - offset
-        if 0 <= stop_index < len(stops):
-            stop = stops[stop_index].copy()
-            stop['sequence_order'] = i
-            optimized_stops.append(stop)
+        if 0 <= stop_index < len(auto_stops):
+            stop = auto_stops[stop_index].copy()
+            optimized_auto_stops.append(stop)
+    
+    # Combine: first_stops + optimized_auto_stops + last_stops
+    final_stops = []
+    sequence = 1
+    
+    for stop in first_stops:
+        stop_copy = stop.copy()
+        stop_copy['sequence_order'] = sequence
+        final_stops.append(stop_copy)
+        sequence += 1
+    
+    for stop in optimized_auto_stops:
+        stop['sequence_order'] = sequence
+        final_stops.append(stop)
+        sequence += 1
+    
+    for stop in last_stops:
+        stop_copy = stop.copy()
+        stop_copy['sequence_order'] = sequence
+        final_stops.append(stop_copy)
+        sequence += 1
     
     return {
-        'stops': optimized_stops,
+        'stops': final_stops,
         'total_distance_meters': solution['total_distance_meters'],
         'total_duration_seconds': solution['total_duration_seconds']
     }

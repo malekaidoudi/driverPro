@@ -1,0 +1,701 @@
+{
+  "info": {
+    "name": "DriverPro API",
+    "description": "Collection complète pour tester l'API DriverPro",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "route_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "stop_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "favorite_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "recurring_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Routes",
+      "item": [
+        {
+          "name": "Get All Routes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/routes",
+              "host": ["{{base_url}}"],
+              "path": ["routes"]
+            }
+          }
+        },
+        {
+          "name": "Create Route",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('route_id', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lyon Centre - Matin\",\n  \"route_date\": \"2026-02-04\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/routes?auto_add_recurring=true",
+              "host": ["{{base_url}}"],
+              "path": ["routes"],
+              "query": [
+                {
+                  "key": "auto_add_recurring",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Route by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Route",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lyon Centre - Après-midi\",\n  \"status\": \"in_progress\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Route",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stops",
+      "item": [
+        {
+          "name": "Create Stop",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('stop_id', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"15 Rue de la Paix\",\n  \"address_complement\": \"Bât B, Digicode 1234\",\n  \"postal_code\": \"69001\",\n  \"city\": \"Lyon\",\n  \"latitude\": 45.764043,\n  \"longitude\": 4.835659,\n  \"first_name\": \"Jean\",\n  \"last_name\": \"Dupont\",\n  \"phone_number\": \"+33612345678\",\n  \"package_count\": 2,\n  \"order_preference\": \"auto\",\n  \"priority\": \"normal\",\n  \"is_favorite\": false,\n  \"is_recurring\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}/stops",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}", "stops"]
+            }
+          }
+        },
+        {
+          "name": "Create Stop (First Order)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"1 Place Bellecour\",\n  \"postal_code\": \"69002\",\n  \"city\": \"Lyon\",\n  \"latitude\": 45.757814,\n  \"longitude\": 4.832011,\n  \"first_name\": \"Marie\",\n  \"last_name\": \"Martin\",\n  \"package_count\": 1,\n  \"order_preference\": \"first\",\n  \"priority\": \"urgent\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}/stops",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}", "stops"]
+            }
+          }
+        },
+        {
+          "name": "Create Stop (Last Order)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"50 Quai Charles de Gaulle\",\n  \"postal_code\": \"69006\",\n  \"city\": \"Lyon\",\n  \"latitude\": 45.784012,\n  \"longitude\": 4.854215,\n  \"first_name\": \"Pierre\",\n  \"last_name\": \"Bernard\",\n  \"package_count\": 3,\n  \"order_preference\": \"last\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}/stops",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}", "stops"]
+            }
+          }
+        },
+        {
+          "name": "Create Stops Batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stops\": [\n    {\n      \"address\": \"10 Rue de la République\",\n      \"postal_code\": \"69001\",\n      \"city\": \"Lyon\",\n      \"latitude\": 45.764500,\n      \"longitude\": 4.834200,\n      \"package_count\": 1\n    },\n    {\n      \"address\": \"25 Avenue Foch\",\n      \"postal_code\": \"69006\",\n      \"city\": \"Lyon\",\n      \"latitude\": 45.770100,\n      \"longitude\": 4.850300,\n      \"package_count\": 2\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}/stops/batch",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}", "stops", "batch"]
+            }
+          }
+        },
+        {
+          "name": "Update Stop",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"package_count\": 3,\n  \"notes\": \"Appeler avant livraison\",\n  \"status\": \"completed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}/stops/{{stop_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}", "stops", "{{stop_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Stop",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}/stops/{{stop_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}", "stops", "{{stop_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Optimization",
+      "item": [
+        {
+          "name": "Optimize Route",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/routes/{{route_id}}/optimize",
+              "host": ["{{base_url}}"],
+              "path": ["routes", "{{route_id}}", "optimize"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Favorite Stops",
+      "item": [
+        {
+          "name": "Get All Favorites",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/favorite-stops",
+              "host": ["{{base_url}}"],
+              "path": ["favorite-stops"]
+            }
+          }
+        },
+        {
+          "name": "Create Favorite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('favorite_id', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"100 Avenue Jean Jaurès\",\n  \"address_complement\": \"Villa Les Roses\",\n  \"postal_code\": \"69007\",\n  \"city\": \"Lyon\",\n  \"latitude\": 45.742100,\n  \"longitude\": 4.841500,\n  \"first_name\": \"Sophie\",\n  \"last_name\": \"Durand\",\n  \"phone_number\": \"+33698765432\",\n  \"label\": \"Mme Durand - Chaque lundi\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/favorite-stops",
+              "host": ["{{base_url}}"],
+              "path": ["favorite-stops"]
+            }
+          }
+        },
+        {
+          "name": "Get Favorite by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/favorite-stops/{{favorite_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["favorite-stops", "{{favorite_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Favorite",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Mme Durand - Client VIP\",\n  \"address_complement\": \"Villa Les Roses, Portail bleu\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/favorite-stops/{{favorite_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["favorite-stops", "{{favorite_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Add Favorite to Route",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"route_id\": \"{{route_id}}\",\n  \"package_count\": 1,\n  \"order_preference\": \"auto\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/favorite-stops/{{favorite_id}}/add-to-route",
+              "host": ["{{base_url}}"],
+              "path": ["favorite-stops", "{{favorite_id}}", "add-to-route"]
+            }
+          }
+        },
+        {
+          "name": "Delete Favorite",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/favorite-stops/{{favorite_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["favorite-stops", "{{favorite_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recurring Stops",
+      "item": [
+        {
+          "name": "Get All Recurring",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/recurring-stops?active_only=false",
+              "host": ["{{base_url}}"],
+              "path": ["recurring-stops"],
+              "query": [
+                {
+                  "key": "active_only",
+                  "value": "false"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Recurring",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set('recurring_id', jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"address\": \"200 Cours Lafayette\",\n  \"address_complement\": \"Entrée B\",\n  \"postal_code\": \"69003\",\n  \"city\": \"Lyon\",\n  \"latitude\": 45.760500,\n  \"longitude\": 4.860200,\n  \"first_name\": \"Entreprise\",\n  \"last_name\": \"ABC\",\n  \"phone_number\": \"+33472000000\",\n  \"is_active\": true,\n  \"days_of_week\": [1, 2, 3, 4, 5],\n  \"default_package_count\": 5,\n  \"default_order_preference\": \"first\",\n  \"notes\": \"Livraison quotidienne - Demander M. Martin\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/recurring-stops",
+              "host": ["{{base_url}}"],
+              "path": ["recurring-stops"]
+            }
+          }
+        },
+        {
+          "name": "Get Recurring by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/recurring-stops/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["recurring-stops", "{{recurring_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Recurring",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"days_of_week\": [1, 3, 5],\n  \"default_package_count\": 3,\n  \"notes\": \"Lundi, Mercredi, Vendredi uniquement\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/recurring-stops/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["recurring-stops", "{{recurring_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Recurring Active",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/recurring-stops/{{recurring_id}}/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["recurring-stops", "{{recurring_id}}", "toggle"]
+            }
+          }
+        },
+        {
+          "name": "Get Recurring for Day",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/recurring-stops/for-day/1",
+              "host": ["{{base_url}}"],
+              "path": ["recurring-stops", "for-day", "1"]
+            },
+            "description": "Get recurring stops for Monday (1=Mon, 7=Sun)"
+          }
+        },
+        {
+          "name": "Delete Recurring",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/recurring-stops/{{recurring_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["recurring-stops", "{{recurring_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delivery Attempts",
+      "item": [
+        {
+          "name": "Record Failure - Absent 1st",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"failure_type\": \"absent\",\n  \"attempt_number\": 1,\n  \"notes\": \"Personne au domicile\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stops/{{stop_id}}/fail",
+              "host": ["{{base_url}}"],
+              "path": ["stops", "{{stop_id}}", "fail"]
+            }
+          }
+        },
+        {
+          "name": "Record Failure - Absent 2nd",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"failure_type\": \"absent\",\n  \"attempt_number\": 2,\n  \"notes\": \"2ème tentative - toujours absent\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stops/{{stop_id}}/fail",
+              "host": ["{{base_url}}"],
+              "path": ["stops", "{{stop_id}}", "fail"]
+            }
+          }
+        },
+        {
+          "name": "Record Failure - Absent 3rd (Final)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"failure_type\": \"absent\",\n  \"attempt_number\": 3,\n  \"notes\": \"3ème tentative - échec définitif\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stops/{{stop_id}}/fail",
+              "host": ["{{base_url}}"],
+              "path": ["stops", "{{stop_id}}", "fail"]
+            }
+          }
+        },
+        {
+          "name": "Record Failure - Reschedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"failure_type\": \"rescheduled\",\n  \"attempt_number\": 1,\n  \"rescheduled_date\": \"2026-02-10\",\n  \"notes\": \"Client demande report au 10/02\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stops/{{stop_id}}/fail",
+              "host": ["{{base_url}}"],
+              "path": ["stops", "{{stop_id}}", "fail"]
+            }
+          }
+        },
+        {
+          "name": "Record Failure - No Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"failure_type\": \"no_access\",\n  \"attempt_number\": 1,\n  \"notes\": \"Adresse introuvable, bâtiment démoli\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/stops/{{stop_id}}/fail",
+              "host": ["{{base_url}}"],
+              "path": ["stops", "{{stop_id}}", "fail"]
+            }
+          }
+        },
+        {
+          "name": "Get Delivery Attempts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/stops/{{stop_id}}/attempts",
+              "host": ["{{base_url}}"],
+              "path": ["stops", "{{stop_id}}", "attempts"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

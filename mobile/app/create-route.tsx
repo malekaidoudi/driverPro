@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from './contexts/ThemeContext';
 import { routesApi } from './services/api';
@@ -10,6 +10,8 @@ export default function CreateRouteScreen() {
 
     const [name, setName] = useState('');
     const [routeDate, setRouteDate] = useState(new Date().toISOString().slice(0, 10));
+    const [startAddress, setStartAddress] = useState('');
+    const [endAddress, setEndAddress] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleCreate = async () => {
@@ -25,7 +27,12 @@ export default function CreateRouteScreen() {
 
         setLoading(true);
         try {
-            const route = await routesApi.create({ name: name.trim(), route_date: routeDate });
+            const route = await routesApi.create({
+                name: name.trim(),
+                route_date: routeDate,
+                start_address: startAddress.trim() || undefined,
+                end_address: endAddress.trim() || undefined,
+            });
             router.replace(`/route/${route.id}`);
         } catch (error: any) {
             Alert.alert('Erreur', error?.message ?? "Impossible de créer la tournée");
@@ -39,7 +46,11 @@ export default function CreateRouteScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ flex: 1, backgroundColor: colors.background }}
         >
-            <View style={{ flex: 1, padding: 24, paddingTop: 60 }}>
+            <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ padding: 24, paddingTop: 60, paddingBottom: 40 }}
+                keyboardShouldPersistTaps="handled"
+            >
                 <Text style={{ fontSize: 28, fontWeight: 'bold', color: colors.textPrimary }}>
                     Nouvelle tournée
                 </Text>
@@ -77,6 +88,42 @@ export default function CreateRouteScreen() {
                         backgroundColor: colors.surface,
                         padding: 16,
                         borderRadius: 12,
+                        marginBottom: 16,
+                        fontSize: 16,
+                        color: colors.textPrimary,
+                    }}
+                    placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
+                    Point de départ (optionnel)
+                </Text>
+                <TextInput
+                    placeholder="Ex: 123 Rue de la Gare, 69001 Lyon"
+                    value={startAddress}
+                    onChangeText={setStartAddress}
+                    style={{
+                        backgroundColor: colors.surface,
+                        padding: 16,
+                        borderRadius: 12,
+                        marginBottom: 16,
+                        fontSize: 16,
+                        color: colors.textPrimary,
+                    }}
+                    placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
+                    Point d'arrivée (optionnel)
+                </Text>
+                <TextInput
+                    placeholder="Ex: Même que départ"
+                    value={endAddress}
+                    onChangeText={setEndAddress}
+                    style={{
+                        backgroundColor: colors.surface,
+                        padding: 16,
+                        borderRadius: 12,
                         marginBottom: 24,
                         fontSize: 16,
                         color: colors.textPrimary,
@@ -106,7 +153,7 @@ export default function CreateRouteScreen() {
                         Annuler
                     </Text>
                 </TouchableOpacity>
-            </View>
+            </ScrollView>
         </KeyboardAvoidingView>
     );
 }

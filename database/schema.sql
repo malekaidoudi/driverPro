@@ -26,6 +26,8 @@ CREATE TABLE public.routes (
     name character varying NOT NULL,
     route_date date NOT NULL,
     status text DEFAULT 'draft'::text,
+    start_address text,
+    end_address text,
     total_distance_meters integer,
     total_duration_seconds integer,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -38,6 +40,9 @@ CREATE TYPE stop_type AS ENUM ('delivery', 'collection', 'break');
 -- Enum pour le statut de l'arrêt
 CREATE TYPE stop_status AS ENUM ('pending', 'completed', 'failed', 'skipped');
 
+-- Enum pour la priorité de l'arrêt
+CREATE TYPE stop_priority AS ENUM ('normal', 'high', 'urgent');
+
 -- Table des arrêts
 CREATE TABLE public.stops (
     id uuid DEFAULT uuid_generate_v4() NOT NULL PRIMARY KEY,
@@ -48,12 +53,21 @@ CREATE TABLE public.stops (
     longitude double precision NOT NULL,
     notes text,
     type stop_type DEFAULT 'delivery'::stop_type NOT NULL,
+    priority stop_priority DEFAULT 'normal'::stop_priority NOT NULL,
     status stop_status DEFAULT 'pending'::stop_status NOT NULL,
     arrival_time timestamp with time zone,
     departure_time timestamp with time zone,
     estimated_duration_seconds integer DEFAULT 180,
     package_count integer DEFAULT 1,
     package_finder_id text,
+    first_name text,
+    last_name text,
+    phone_number text,
+    time_window_start time,
+    time_window_end time,
+    package_weight_kg double precision,
+    package_size text,
+    is_fragile boolean DEFAULT false,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 

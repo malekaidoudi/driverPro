@@ -2,17 +2,19 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 interface ThemeColors {
     primary: string;
+    primaryDark: string;
     secondary: string;
-    accent: string;
-    background: string;
+    danger: string;
+    warning: string;
     surface: string;
+    background: string;
     textPrimary: string;
     textSecondary: string;
-    error: string;
+    border: string;
 }
 
 interface ThemeContextType {
@@ -23,25 +25,29 @@ interface ThemeContextType {
 }
 
 const lightColors: ThemeColors = {
-    primary: '#4A90E2',
-    secondary: '#50E3C2',
-    accent: '#F5A623',
-    background: '#F9F9F9',
+    primary: '#FF6B00',
+    primaryDark: '#E55A00',
+    secondary: '#22C55E',
+    danger: '#EF4444',
+    warning: '#F59E0B',
     surface: '#FFFFFF',
-    textPrimary: '#4A4A4A',
-    textSecondary: '#9B9B9B',
-    error: '#D0021B',
+    background: '#F5F5F5',
+    textPrimary: '#1A1A1A',
+    textSecondary: '#6B7280',
+    border: '#E5E5E5',
 };
 
 const darkColors: ThemeColors = {
-    primary: '#4A90E2',
-    secondary: '#50E3C2',
-    accent: '#F5A623',
-    background: '#121212',
-    surface: '#1E1E1E',
-    textPrimary: '#EAEAEA',
-    textSecondary: '#A5A5A5',
-    error: '#CF6679',
+    primary: '#FF6B00',
+    primaryDark: '#E55A00',
+    secondary: '#22C55E',
+    danger: '#EF4444',
+    warning: '#F59E0B',
+    surface: '#1A1A1A',
+    background: '#0D0D0D',
+    textPrimary: '#FFFFFF',
+    textSecondary: '#9CA3AF',
+    border: '#374151',
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);

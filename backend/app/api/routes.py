@@ -36,6 +36,7 @@ async def get_routes(
 @router.post("", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
 async def create_route(
     route: RouteCreate,
+    auto_add_recurring: bool = True,
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_authed_supabase_client)
 ):
@@ -48,7 +49,61 @@ async def create_route(
     if not response.data:
         raise HTTPException(status_code=400, detail="Failed to create route")
     
-    return RouteResponse(**response.data[0])
+    created_route = response.data[0]
+    
+    # Auto-add recurring stops for this day of week
+    if auto_add_recurring:
+        await _add_recurring_stops_to_route(
+            created_route["id"],
+            route.route_date,
+            current_user["id"],
+            supabase
+        )
+    
+    return RouteResponse(**created_route)
+
+
+async def _add_recurring_stops_to_route(
+    route_id: str,
+    route_date: date,
+    user_id: str,
+    supabase: Client
+):
+    """Auto-add active recurring stops for the day of week"""
+    day_of_week = route_date.isoweekday()  # 1=Monday, 7=Sunday
+    
+    # Get active recurring stops for this day
+    recurring_response = supabase.table("recurring_stops").select("*").eq(
+        "user_id", user_id
+    ).eq("is_active", True).contains("days_of_week", [day_of_week]).execute()
+    
+    if not recurring_response.data:
+        return
+    
+    # Create stops from recurring stops
+    stops_to_create = []
+    for recurring in recurring_response.data:
+        stop_data = {
+            "route_id": route_id,
+            "address": recurring["address"],
+            "address_complement": recurring.get("address_complement"),
+            "postal_code": recurring.get("postal_code"),
+            "city": recurring.get("city"),
+            "latitude": recurring["latitude"],
+            "longitude": recurring["longitude"],
+            "first_name": recurring.get("first_name"),
+            "last_name": recurring.get("last_name"),
+            "phone_number": recurring.get("phone_number"),
+            "notes": recurring.get("notes"),
+            "package_count": recurring.get("default_package_count", 1),
+            "order_preference": recurring.get("default_order_preference", "auto"),
+            "recurring_stop_id": recurring["id"],
+            "status": "pending",
+        }
+        stops_to_create.append(stop_data)
+    
+    if stops_to_create:
+        supabase.table("stops").insert(stops_to_create).execute()
 
 
 @router.get("/{route_id}", response_model=RouteWithStops)

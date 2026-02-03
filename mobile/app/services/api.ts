@@ -59,7 +59,7 @@ export const routesApi = {
         return response.data;
     },
 
-    create: async (data: { name: string; route_date: string }): Promise<Route> => {
+    create: async (data: { name: string; route_date: string; start_address?: string; end_address?: string }): Promise<Route> => {
         const response = await api.post('/routes', data);
         return response.data;
     },

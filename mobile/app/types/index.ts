@@ -18,6 +18,12 @@ export enum StopStatus {
     SKIPPED = 'skipped'
 }
 
+export enum StopPriority {
+    NORMAL = 'normal',
+    HIGH = 'high',
+    URGENT = 'urgent'
+}
+
 export interface Stop {
     id: string;
     route_id: string;
@@ -27,6 +33,7 @@ export interface Stop {
     longitude: number;
     notes?: string;
     type: StopType;
+    priority: StopPriority;
     status: StopStatus;
     arrival_time?: string;
     departure_time?: string;
@@ -36,7 +43,30 @@ export interface Stop {
     first_name?: string;
     last_name?: string;
     phone_number?: string;
+    time_window_start?: string;
+    time_window_end?: string;
+    package_weight_kg?: number;
+    package_size?: string;
+    is_fragile?: boolean;
     created_at: string;
+}
+
+export interface StopCreateData {
+    address: string;
+    latitude: number;
+    longitude: number;
+    first_name?: string;
+    last_name?: string;
+    phone_number?: string;
+    notes?: string;
+    type?: StopType;
+    priority?: StopPriority;
+    time_window_start?: string;
+    time_window_end?: string;
+    package_count?: number;
+    package_weight_kg?: number;
+    package_size?: string;
+    is_fragile?: boolean;
 }
 
 export interface OcrScanResult {

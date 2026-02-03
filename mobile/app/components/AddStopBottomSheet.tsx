@@ -17,9 +17,9 @@ import {
 import { Camera, MagnifyingGlass, Microphone, PencilSimple, Trash } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
-import { PlacePrediction, StopType } from '../types';
+import { PlacePrediction, StopType, StopPriority } from '../types';
 import { servicesApi } from '../services/api';
-import OCRScanner from './OCRScanner';
+import OCRScanner from './OCRScannerOptimized';
 import { ParsedOCRData, parseOCRText, hasValidAddress } from '../hooks/useOCRParsing';
 
 type ExistingStop = {
@@ -53,10 +53,13 @@ export type StopPayload = {
     packageCount: number;
     order: StopOrder;
     type: StopType;
+    priority: StopPriority;
     durationMinutes: number;
     firstName?: string;
     lastName?: string;
     phoneNumber?: string;
+    timeWindowStart?: string;
+    timeWindowEnd?: string;
 };
 
 type AddStopBottomSheetProps = {
@@ -68,6 +71,9 @@ type AddStopBottomSheetProps = {
     initialPackageCount?: number;
     initialOrder?: StopOrder;
     initialType?: StopType;
+    initialPriority?: StopPriority;
+    initialTimeWindowStart?: string;
+    initialTimeWindowEnd?: string;
     initialDurationMinutes?: number;
     initialFirstName?: string;
     initialLastName?: string;
@@ -91,6 +97,9 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         initialPackageCount = 1,
         initialOrder = 'auto',
         initialType = StopType.DELIVERY,
+        initialPriority = StopPriority.NORMAL,
+        initialTimeWindowStart = '',
+        initialTimeWindowEnd = '',
         initialDurationMinutes = 3,
         initialFirstName = '',
         initialLastName = '',
@@ -116,6 +125,9 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     const [packageCount, setPackageCount] = useState(initialPackageCount);
     const [order, setOrder] = useState<StopOrder>(initialOrder);
     const [type, setType] = useState<StopType>(initialType);
+    const [priority, setPriority] = useState<StopPriority>(initialPriority);
+    const [timeWindowStart, setTimeWindowStart] = useState(initialTimeWindowStart);
+    const [timeWindowEnd, setTimeWindowEnd] = useState(initialTimeWindowEnd);
     const [durationMinutes, setDurationMinutes] = useState(initialDurationMinutes);
     const [firstName, setFirstName] = useState(initialFirstName);
     const [lastName, setLastName] = useState(initialLastName);
@@ -148,6 +160,9 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setPackageCount(initialPackageCount);
         setOrder(initialOrder);
         setType(initialType);
+        setPriority(initialPriority);
+        setTimeWindowStart(initialTimeWindowStart);
+        setTimeWindowEnd(initialTimeWindowEnd);
         setDurationMinutes(initialDurationMinutes);
         setFirstName(initialFirstName);
         setLastName(initialLastName);
@@ -159,7 +174,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setOpeningMorningEnd('12:00');
         setOpeningAfternoonStart('13:30');
         setOpeningAfternoonEnd('17:00');
-    }, [initialAddress, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialOrder, initialType, initialDurationMinutes, initialFirstName, initialLastName, initialPhoneNumber]);
+    }, [initialAddress, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialPhoneNumber]);
 
     React.useImperativeHandle(
         ref,
@@ -286,10 +301,13 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                 packageCount,
                 order,
                 type,
+                priority,
                 durationMinutes,
                 firstName: firstName.trim() || undefined,
                 lastName: lastName.trim() || undefined,
                 phoneNumber: phoneNumber.trim() || undefined,
+                timeWindowStart: timeWindowStart.trim() || undefined,
+                timeWindowEnd: timeWindowEnd.trim() || undefined,
             });
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             // Reset le formulaire pour le prochain stop
@@ -512,8 +530,10 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
             ExpoSpeechRecognitionModule.start({
                 lang: 'fr-FR',
                 interimResults: true,
-                maxAlternatives: 1,
-                continuous: false,
+                maxAlternatives: 3,
+                continuous: true,
+                requiresOnDeviceRecognition: false,
+                addsPunctuation: true,
             });
         } catch (e: any) {
             Alert.alert('Erreur', e?.message ?? 'Impossible de démarrer la dictée');
@@ -940,6 +960,71 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                         >
                             <Text style={{ color: type === StopType.COLLECTION ? '#FFFFFF' : colors.textPrimary, fontWeight: '800', fontSize: 12 }}>Collecte</Text>
                         </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Priority selector */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <Text style={{ color: textSecondary, fontSize: 12 }}>Priorité</Text>
+                    <View style={{ flexDirection: 'row', backgroundColor: colors.background, borderRadius: 12, padding: 4 }}>
+                        {([
+                            { key: StopPriority.NORMAL, label: '🟢 Normal', color: '#22C55E' },
+                            { key: StopPriority.HIGH, label: '🟠 Haute', color: '#F59E0B' },
+                            { key: StopPriority.URGENT, label: '🔴 Urgent', color: '#EF4444' },
+                        ] as const).map((it) => (
+                            <TouchableOpacity
+                                key={it.key}
+                                onPress={() => setPriority(it.key)}
+                                style={{
+                                    paddingVertical: 8,
+                                    paddingHorizontal: 10,
+                                    borderRadius: 10,
+                                    backgroundColor: priority === it.key ? it.color : 'transparent',
+                                }}
+                            >
+                                <Text style={{ color: priority === it.key ? '#FFFFFF' : colors.textPrimary, fontWeight: '800', fontSize: 11 }}>{it.label}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+
+                {/* Time window */}
+                <View style={{ marginBottom: 12 }}>
+                    <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Créneau horaire (optionnel)</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <TextInput
+                            value={timeWindowStart}
+                            onChangeText={setTimeWindowStart}
+                            placeholder="08:00"
+                            placeholderTextColor={textSecondary}
+                            keyboardType="numbers-and-punctuation"
+                            style={{
+                                flex: 1,
+                                backgroundColor: colors.background,
+                                borderRadius: 12,
+                                paddingHorizontal: 12,
+                                paddingVertical: 10,
+                                color: colors.textPrimary,
+                                textAlign: 'center',
+                            }}
+                        />
+                        <Text style={{ color: textSecondary }}>→</Text>
+                        <TextInput
+                            value={timeWindowEnd}
+                            onChangeText={setTimeWindowEnd}
+                            placeholder="12:00"
+                            placeholderTextColor={textSecondary}
+                            keyboardType="numbers-and-punctuation"
+                            style={{
+                                flex: 1,
+                                backgroundColor: colors.background,
+                                borderRadius: 12,
+                                paddingHorizontal: 12,
+                                paddingVertical: 10,
+                                color: colors.textPrimary,
+                                textAlign: 'center',
+                            }}
+                        />
                     </View>
                 </View>
 

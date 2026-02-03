@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
-import { routesApi, stopsApi } from '../services/api';
-import { Route, Stop, StopType } from '../types';
-import { ArrowLeft, Plus, Sparkle } from 'phosphor-react-native';
+import { routesApi, stopsApi, servicesApi } from '../services/api';
+import { Route, Stop, StopType, StopPriority } from '../types';
+import { ArrowLeft, Plus, Sparkle, Camera } from 'phosphor-react-native';
 import { AddStopBottomSheet, AddStopBottomSheetRef, StopPayload } from '../components/AddStopBottomSheet';
+import OCRScanner from '../components/OCRScannerOptimized';
+import { ParsedOCRData } from '../hooks/useOCRParsing';
 
 export default function RouteDetailsScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +26,7 @@ export default function RouteDetailsScreen() {
     const [selectedStop, setSelectedStop] = useState<Stop | null>(null);
     const [duplicatingStop, setDuplicatingStop] = useState(false);
     const [deletingStop, setDeletingStop] = useState(false);
+    const [rapidScanVisible, setRapidScanVisible] = useState(false);
 
     const load = useCallback(async () => {
         if (!routeId) return;
@@ -117,6 +120,50 @@ export default function RouteDetailsScreen() {
         addStopSheetRef.current?.present();
     };
 
+    const openRapidScan = () => {
+        setRapidScanVisible(true);
+    };
+
+    // Handler for rapid scan mode - auto-add stops from OCR
+    const handleRapidAdd = async (parsed: ParsedOCRData): Promise<void> => {
+        if (!routeId) return;
+
+        // Build full address from parsed data
+        const addressParts = [parsed.street, parsed.postalCode, parsed.city].filter(Boolean);
+        const fullAddress = addressParts.join(', ') || 'Adresse scannée';
+
+        // Geocode the address to get coordinates
+        let latitude = 0;
+        let longitude = 0;
+
+        try {
+            const predictions = await servicesApi.autocomplete(fullAddress);
+            if (predictions.length > 0) {
+                const details = await servicesApi.getPlaceDetails(predictions[0].place_id);
+                latitude = details.latitude;
+                longitude = details.longitude;
+            }
+        } catch (e) {
+            console.warn('[RapidScan] Geocoding failed, using 0,0');
+        }
+
+        // Create the stop
+        await stopsApi.create(routeId, {
+            address: fullAddress,
+            latitude,
+            longitude,
+            type: StopType.DELIVERY,
+            priority: StopPriority.NORMAL,
+            first_name: parsed.firstName || undefined,
+            last_name: parsed.lastName || undefined,
+            phone_number: parsed.phoneNumber || undefined,
+            notes: parsed.companyName ? `Société: ${parsed.companyName}` : undefined,
+        } as any);
+
+        // Reload route data
+        load();
+    };
+
     const handleAddStopSubmit = async (payload: StopPayload) => {
         if (!routeId) return;
 
@@ -130,12 +177,15 @@ export default function RouteDetailsScreen() {
             longitude: payload.longitude,
             notes: payload.notes || undefined,
             type: payload.type,
+            priority: payload.priority,
             estimated_duration_seconds: estimatedDurationSeconds,
             package_count: packageCount,
             sequence_order: sequenceOrder,
             first_name: payload.firstName || undefined,
             last_name: payload.lastName || undefined,
             phone_number: payload.phoneNumber || undefined,
+            time_window_start: payload.timeWindowStart || undefined,
+            time_window_end: payload.timeWindowEnd || undefined,
         } as any);
 
         addStopSheetRef.current?.close();
@@ -226,6 +276,20 @@ export default function RouteDetailsScreen() {
                         <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginLeft: 8 }}>
                             {optimizing ? 'Optimisation...' : 'Optimiser'}
                         </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        onPress={openRapidScan}
+                        style={{
+                            width: 52,
+                            height: 52,
+                            borderRadius: 12,
+                            backgroundColor: '#FF6B00',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}
+                    >
+                        <Camera size={22} color="#FFFFFF" weight="bold" />
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -340,6 +404,22 @@ export default function RouteDetailsScreen() {
                 ref={addStopSheetRef}
                 onPressAdd={handleAddStopSubmit}
             />
+
+            {/* Rapid Scan Modal */}
+            <Modal
+                visible={rapidScanVisible}
+                animationType="slide"
+                presentationStyle="fullScreen"
+                onRequestClose={() => setRapidScanVisible(false)}
+            >
+                <OCRScanner
+                    isVisible={rapidScanVisible}
+                    rapidMode={true}
+                    onRapidAdd={handleRapidAdd}
+                    onDetected={() => { }}
+                    onClose={() => setRapidScanVisible(false)}
+                />
+            </Modal>
         </View>
     );
 }

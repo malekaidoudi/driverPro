@@ -285,3 +285,6 @@ Pour toute question, consultez:
     pip install -r requirements.txt
   # Lancer le serveur
     uvicorn app.main:app --host 192.168.1.60 --port 8000 --reload
+
+## Build iOS avec bundle embarqué (pas besoin de Metro)
+    npx expo run:ios --device --configuration Release
