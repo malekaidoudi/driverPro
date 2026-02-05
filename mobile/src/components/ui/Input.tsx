@@ -9,6 +9,7 @@ import {
     TextInputProps,
 } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
+import { componentSizes, radius, spacing } from '../../theme/tokens';
 
 interface InputProps extends Omit<TextInputProps, 'style'> {
     label?: string;
@@ -28,22 +29,22 @@ export const Input: React.FC<InputProps> = ({
     rightIcon,
     ...textInputProps
 }) => {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const [isFocused, setIsFocused] = useState(false);
 
     const getBorderColor = (): string => {
         if (error) return colors.danger;
-        if (isFocused) return colors.primary;
+        if (isFocused) return colors.borderFocus;
         return colors.border;
     };
 
     const inputContainerStyle: ViewStyle = {
-        backgroundColor: colors.surface,
+        backgroundColor: isDark ? colors.bgElevated : colors.bgPrimary,
         borderColor: getBorderColor(),
         borderWidth: isFocused ? 2 : 1,
-        borderRadius: 12,
-        height: 52,
-        paddingHorizontal: 16,
+        borderRadius: radius.md,
+        height: componentSizes.input.height,
+        paddingHorizontal: componentSizes.input.paddingX,
         flexDirection: 'row',
         alignItems: 'center',
     };
@@ -51,22 +52,23 @@ export const Input: React.FC<InputProps> = ({
     const textInputStyle: TextStyle = {
         flex: 1,
         fontSize: 16,
-        fontFamily: 'Inter-Regular',
+        fontFamily: 'Inter',
         color: colors.textPrimary,
     };
 
     const labelStyle: TextStyle = {
         fontSize: 14,
-        fontFamily: 'Inter-Medium',
+        fontFamily: 'Inter',
+        fontWeight: '500',
         color: colors.textSecondary,
-        marginBottom: 8,
+        marginBottom: spacing[2],
     };
 
     const errorStyle: TextStyle = {
         fontSize: 12,
-        fontFamily: 'Inter-Regular',
+        fontFamily: 'Inter',
         color: colors.danger,
-        marginTop: 4,
+        marginTop: spacing[1],
     };
 
     return (
@@ -76,7 +78,7 @@ export const Input: React.FC<InputProps> = ({
                 {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
                 <TextInput
                     style={[textInputStyle, inputStyle]}
-                    placeholderTextColor={colors.textSecondary}
+                    placeholderTextColor={colors.textTertiary}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                     {...textInputProps}

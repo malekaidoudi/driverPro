@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useTheme } from '../../src/contexts/ThemeContext';
-import { routesApi, stopsApi, servicesApi } from '../../src/services/api';
-import { Route, Stop, StopType, StopPriority } from '../../src/types';
-import { ArrowLeft, Plus, Sparkle, Camera } from 'phosphor-react-native';
-import { AddStopBottomSheet, AddStopBottomSheetRef, StopPayload } from '../../src/components/AddStopBottomSheet';
-import OCRScanner from '../../src/components/OCRScannerOptimized';
-import { ParsedOCRData } from '../../src/hooks/useOCRParsing';
+import { useTheme } from '../../../src/contexts/ThemeContext';
+import { routesApi, stopsApi, servicesApi } from '../../../src/services/api';
+import { Route, Stop, StopType, StopPriority, RouteStatus } from '../../../src/types';
+import { ArrowLeft, Plus, Sparkle, Camera, Play } from 'phosphor-react-native';
+import { AddStopBottomSheet, AddStopBottomSheetRef, StopPayload } from '../../../src/components/AddStopBottomSheet';
+import OCRScanner from '../../../src/components/OCRScannerOptimized';
+import { ParsedOCRData } from '../../../src/hooks/useOCRParsing';
+import * as Haptics from 'expo-haptics';
 
 export default function RouteDetailsScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -53,15 +54,28 @@ export default function RouteDetailsScreen() {
     const handleOptimize = async () => {
         if (!routeId) return;
         setOptimizing(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
-            const updated = await routesApi.optimize(routeId);
-            setRoute(updated);
-            Alert.alert('Succès', 'La tournée a été optimisée');
+            await routesApi.optimize(routeId);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // Navigate to optimized view
+            router.push(`/route/${routeId}/optimized`);
         } catch (error: any) {
             Alert.alert('Erreur', error?.message ?? "Impossible d'optimiser la tournée");
         } finally {
             setOptimizing(false);
         }
+    };
+
+    const handleContinueRoute = () => {
+        if (!routeId) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        router.push(`/route/${routeId}/execute`);
+    };
+
+    const handleViewOptimized = () => {
+        if (!routeId) return;
+        router.push(`/route/${routeId}/optimized`);
     };
 
     const handleDuplicateStop = async () => {
@@ -257,10 +271,52 @@ export default function RouteDetailsScreen() {
                     </View>
                 </View>
 
+                {/* Continue button for in_progress routes */}
+                {route.status === 'in_progress' && (
+                    <TouchableOpacity
+                        onPress={handleContinueRoute}
+                        style={{
+                            backgroundColor: '#22C55E',
+                            padding: 16,
+                            borderRadius: 12,
+                            alignItems: 'center',
+                            flexDirection: 'row',
+                            justifyContent: 'center',
+                            marginBottom: 16,
+                        }}
+                    >
+                        <Play size={22} color="#FFFFFF" weight="fill" />
+                        <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', marginLeft: 10 }}>
+                            CONTINUER LA TOURNÉE
+                        </Text>
+                    </TouchableOpacity>
+                )}
+
+                {/* View optimized route button */}
+                {route.status === 'optimized' && (
+                    <TouchableOpacity
+                        onPress={handleViewOptimized}
+                        style={{
+                            backgroundColor: '#22C55E',
+                            padding: 16,
+                            borderRadius: 12,
+                            alignItems: 'center',
+                            flexDirection: 'row',
+                            justifyContent: 'center',
+                            marginBottom: 16,
+                        }}
+                    >
+                        <Play size={22} color="#FFFFFF" weight="fill" />
+                        <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800', marginLeft: 10 }}>
+                            DÉMARRER LA TOURNÉE
+                        </Text>
+                    </TouchableOpacity>
+                )}
+
                 <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
                     <TouchableOpacity
                         onPress={handleOptimize}
-                        disabled={optimizing}
+                        disabled={optimizing || route.status === 'in_progress' || route.status === 'completed'}
                         style={{
                             flex: 1,
                             backgroundColor: colors.primary,
@@ -269,7 +325,7 @@ export default function RouteDetailsScreen() {
                             alignItems: 'center',
                             flexDirection: 'row',
                             justifyContent: 'center',
-                            opacity: optimizing ? 0.8 : 1,
+                            opacity: (optimizing || route.status === 'in_progress' || route.status === 'completed') ? 0.5 : 1,
                         }}
                     >
                         <Sparkle size={18} color="#FFFFFF" weight="fill" />

@@ -13,7 +13,7 @@
  * TARGET: < 300ms detection latency
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -26,6 +26,13 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withSpring,
+    withTiming,
+    interpolateColor,
+} from 'react-native-reanimated';
 import {
     Camera,
     useCameraDevice,
@@ -33,7 +40,7 @@ import {
     useCameraFormat,
     useFrameProcessor,
 } from 'react-native-vision-camera';
-import { performOcr } from '@bear-block/vision-camera-ocr';
+import { useTextRecognition } from 'react-native-vision-camera-text-recognition';
 import { Worklets } from 'react-native-worklets-core';
 import * as Haptics from 'expo-haptics';
 import { X, MagnifyingGlassPlus, MagnifyingGlassMinus, Flashlight, Check, PencilSimple, Phone, MapPin, User, Buildings } from 'phosphor-react-native';
@@ -41,8 +48,15 @@ import {
     parseOCRText,
     hasValidAddress,
     areResultsSimilar,
-    ParsedOCRData,
+    ParsedAddress as ParsedOCRData,
 } from '../hooks/useOCRParsing';
+import {
+    useROITracker,
+    ocrResultToTextBlocks,
+    scaleROIToScreen,
+    BoundingBox,
+} from '../hooks/useROITracker';
+import { logOCRTest } from '../services/ocrTestLogger';
 
 // ============================================================================
 // CONFIGURATION
@@ -50,11 +64,17 @@ import {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ROI (Region of Interest)
+// ROI (Region of Interest) - Fallback values for initial/no-detection state
 const ROI_WIDTH = SCREEN_WIDTH * 0.9;
 const ROI_HEIGHT = Math.round(SCREEN_HEIGHT * 0.3);
 const ROI_TOP = Math.round(SCREEN_HEIGHT * 0.3);
 const ROI_LEFT = (SCREEN_WIDTH - ROI_WIDTH) / 2;
+
+// Dynamic ROI config
+// Using react-native-vision-camera-text-recognition (ML Kit) which supports bounding boxes
+const DYNAMIC_ROI_ENABLED = true;   // Toggle dynamic ROI
+const ROI_DEBUG = __DEV__;          // Debug logging in dev mode
+const ROI_SPRING_CONFIG = { damping: 15, stiffness: 150 };
 
 // Performance tuning
 const TARGET_FPS = 15;                 // Camera FPS (frame processor runs on each frame)
@@ -113,6 +133,21 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const lastProcessTimeRef = useRef(0);
     const isValidatedRef = useRef(false);
     const rapidCooldownRef = useRef(false); // Prevent duplicate scans in rapid mode
+
+    // Dynamic ROI Tracker
+    const { updateROI, reset: resetROI } = useROITracker();
+    const [dynamicROI, setDynamicROI] = useState<BoundingBox | null>(null);
+    const [roiIsStable, setRoiIsStable] = useState(false);
+
+    // OCR Plugin (ML Kit with bounding boxes)
+    const { scanText } = useTextRecognition({ language: 'latin' });
+
+    // Animated ROI values
+    const roiX = useSharedValue(ROI_LEFT);
+    const roiY = useSharedValue(ROI_TOP);
+    const roiWidth = useSharedValue(ROI_WIDTH);
+    const roiHeight = useSharedValue(ROI_HEIGHT);
+    const roiStable = useSharedValue(0); // 0 = unstable, 1 = stable
 
     // Request permission on mount
     if (!hasPermission) {
@@ -231,22 +266,108 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const handleOCRResultWorklet = Worklets.createRunOnJS(handleOCRResult);
 
     // ========================================================================
+    // DYNAMIC ROI UPDATE HANDLER
+    // ========================================================================
+    const handleROIUpdate = useCallback((ocrResult: any, frameWidth: number, frameHeight: number) => {
+        if (!DYNAMIC_ROI_ENABLED) return;
+
+        const textBlocks = ocrResultToTextBlocks(ocrResult);
+
+        if (ROI_DEBUG && textBlocks.length > 0) {
+            console.log(`[ROI] Blocks: ${textBlocks.length}, Frame: ${frameWidth}x${frameHeight}, Screen: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}`);
+        }
+
+        const roiState = updateROI(textBlocks, frameWidth, frameHeight);
+
+        if (roiState.roi) {
+            // Scale from frame coords to screen coords
+            const screenROI = scaleROIToScreen(
+                roiState.roi,
+                frameWidth,
+                frameHeight,
+                SCREEN_WIDTH,
+                SCREEN_HEIGHT,
+                'portrait'
+            );
+
+            if (ROI_DEBUG) {
+                console.log(`[ROI] Frame ROI: x=${Math.round(roiState.roi.x)}, y=${Math.round(roiState.roi.y)}, w=${Math.round(roiState.roi.width)}, h=${Math.round(roiState.roi.height)}`);
+                console.log(`[ROI] Screen ROI: x=${screenROI.x}, y=${screenROI.y}, w=${screenROI.width}, h=${screenROI.height}, stable=${roiState.isStable}`);
+            }
+
+            setDynamicROI(screenROI);
+            setRoiIsStable(roiState.isStable);
+
+            // Update animated values with spring animation
+            roiX.value = withSpring(screenROI.x, ROI_SPRING_CONFIG);
+            roiY.value = withSpring(screenROI.y, ROI_SPRING_CONFIG);
+            roiWidth.value = withSpring(screenROI.width, ROI_SPRING_CONFIG);
+            roiHeight.value = withSpring(screenROI.height, ROI_SPRING_CONFIG);
+            roiStable.value = withTiming(roiState.isStable ? 1 : 0, { duration: 200 });
+        }
+    }, [updateROI, roiX, roiY, roiWidth, roiHeight, roiStable]);
+
+    const handleROIUpdateWorklet = Worklets.createRunOnJS(handleROIUpdate);
+
+    // Debug logging for OCR results
+    const logOCRDebug = useCallback((message: string) => {
+        if (ROI_DEBUG) {
+            console.log(message);
+        }
+    }, []);
+    const logOCRDebugWorklet = Worklets.createRunOnJS(logOCRDebug);
+
+    // ========================================================================
     // FRAME PROCESSOR (Worklet Thread - runs on every frame)
     // ========================================================================
     const frameProcessor = useFrameProcessor((frame) => {
         'worklet';
 
-        // Log frame orientation for debugging
-        console.log(`[FRAME] ${frame.width}x${frame.height} orientation: ${frame.orientation}`);
+        // Run ML Kit OCR on frame
+        const results = scanText(frame);
 
-        // Run OCR on frame (in-memory, no file I/O)
-        const result = performOcr(frame, { recognitionLevel: 'accurate' });
+        // ML Kit returns object: { resultText: string, blocks: [...] }
+        if (results && typeof results === 'object') {
+            const fullText = (results as any).resultText || '';
+            const blocks = (results as any).blocks;
 
-        // Extract text from result
-        if (result && result.text && result.text.length > 0) {
-            handleOCRResultWorklet(result.text);
+            if (ROI_DEBUG && fullText.length > 0) {
+                logOCRDebugWorklet(`[OCR] Text: ${fullText.substring(0, 80)}...`);
+                if (blocks) {
+                    logOCRDebugWorklet(`[OCR] Blocks count: ${Array.isArray(blocks) ? blocks.length : 'N/A'}`);
+                }
+            }
+
+            if (fullText.length > 0) {
+                handleOCRResultWorklet(fullText);
+
+                // Update dynamic ROI if enabled - pass the full result object
+                if (DYNAMIC_ROI_ENABLED && blocks) {
+                    handleROIUpdateWorklet(results, frame.width, frame.height);
+                }
+            }
         }
-    }, [handleOCRResultWorklet]);
+    }, [scanText, handleOCRResultWorklet, handleROIUpdateWorklet, logOCRDebugWorklet]);
+
+    // ========================================================================
+    // ANIMATED ROI STYLE
+    // ========================================================================
+    const animatedROIStyle = useAnimatedStyle(() => {
+        return {
+            position: 'absolute',
+            left: roiX.value,
+            top: roiY.value,
+            width: roiWidth.value,
+            height: roiHeight.value,
+            borderWidth: 3,
+            borderRadius: 12,
+            borderColor: interpolateColor(
+                roiStable.value,
+                [0, 1],
+                ['#FFAA00', '#00FF00']
+            ),
+        };
+    });
 
     // ========================================================================
     // FOCUS (tap to focus)
@@ -274,8 +395,18 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 setRapidScanCount(0);
                 setRapidLastAddress('');
             }
+            // Reset dynamic ROI
+            resetROI();
+            setDynamicROI(null);
+            setRoiIsStable(false);
+            // Reset to default position
+            roiX.value = ROI_LEFT;
+            roiY.value = ROI_TOP;
+            roiWidth.value = ROI_WIDTH;
+            roiHeight.value = ROI_HEIGHT;
+            roiStable.value = 0;
         }
-    }, [isVisible, rapidMode]);
+    }, [isVisible, rapidMode, resetROI, roiX, roiY, roiWidth, roiHeight, roiStable]);
 
     // ========================================================================
     // CONFIRMATION OVERLAY HANDLERS
@@ -295,8 +426,22 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             lastName: editLastName || pendingData.lastName,
             phoneNumber: editPhone || pendingData.phoneNumber,
             // Build full address
-            address: [editStreet, editPostalCode, editCity].filter(Boolean).join(', ') || pendingData.address,
+            fullAddress: [editStreet, editPostalCode, editCity].filter(Boolean).join(', ') || pendingData.fullAddress,
         };
+
+        // Log the OCR test for later review
+        logOCRTest(
+            pendingData.rawText || '',
+            {
+                street: updatedData.street,
+                postalCode: updatedData.postalCode,
+                city: updatedData.city,
+                firstName: updatedData.firstName,
+                lastName: updatedData.lastName,
+                phone: updatedData.phoneNumber,
+            },
+            true // Marked as confirmed by user
+        ).catch(e => console.warn('[OCR-LOG] Failed:', e));
 
         try {
             await onRapidAdd(updatedData);
@@ -357,6 +502,7 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 enableZoomGesture
                 fps={TARGET_FPS}
                 frameProcessor={frameProcessor}
+                pixelFormat="yuv"
                 // Video mode only - NO photo
                 photo={false}
                 video={false}
@@ -367,23 +513,48 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 }}
             />
 
-            {/* Overlay with ROI */}
+            {/* Overlay with Dynamic ROI */}
             <View style={styles.overlay} pointerEvents="none">
-                <View style={[styles.darkArea, { height: ROI_TOP }]} />
-                <View style={styles.roiRow}>
-                    <View style={[styles.darkArea, { width: ROI_LEFT }]} />
-                    <View style={[
-                        styles.roi,
-                        {
-                            width: ROI_WIDTH,
-                            height: ROI_HEIGHT,
-                            borderColor: scannerState === 'validated' ? '#00FF00' :
-                                scannerState === 'processing' ? '#FFA500' : '#FFFFFF',
-                        }
-                    ]} />
-                    <View style={[styles.darkArea, { width: ROI_LEFT }]} />
+                {/* Dark overlay */}
+                <View style={StyleSheet.absoluteFill}>
+                    <View style={[styles.darkArea, { flex: 1 }]} />
                 </View>
-                <View style={[styles.darkArea, { flex: 1 }]} />
+
+                {/* Animated Dynamic ROI */}
+                {DYNAMIC_ROI_ENABLED ? (
+                    <Animated.View style={[animatedROIStyle, styles.dynamicRoi]}>
+                        {/* Corner indicators */}
+                        <View style={[styles.corner, styles.cornerTL]} />
+                        <View style={[styles.corner, styles.cornerTR]} />
+                        <View style={[styles.corner, styles.cornerBL]} />
+                        <View style={[styles.corner, styles.cornerBR]} />
+                        {/* Stability indicator */}
+                        {roiIsStable && (
+                            <View style={styles.stableIndicator}>
+                                <Text style={styles.stableText}>✓</Text>
+                            </View>
+                        )}
+                    </Animated.View>
+                ) : (
+                    /* Fallback: Static ROI */
+                    <>
+                        <View style={[styles.darkArea, { height: ROI_TOP }]} />
+                        <View style={styles.roiRow}>
+                            <View style={[styles.darkArea, { width: ROI_LEFT }]} />
+                            <View style={[
+                                styles.roi,
+                                {
+                                    width: ROI_WIDTH,
+                                    height: ROI_HEIGHT,
+                                    borderColor: scannerState === 'validated' ? '#00FF00' :
+                                        scannerState === 'processing' ? '#FFA500' : '#FFFFFF',
+                                }
+                            ]} />
+                            <View style={[styles.darkArea, { width: ROI_LEFT }]} />
+                        </View>
+                        <View style={[styles.darkArea, { flex: 1 }]} />
+                    </>
+                )}
             </View>
 
             {/* Close button */}
@@ -611,6 +782,58 @@ const styles = StyleSheet.create({
     roi: {
         borderWidth: 2,
         borderRadius: 12,
+    },
+    // Dynamic ROI styles
+    dynamicRoi: {
+        backgroundColor: 'transparent',
+    },
+    corner: {
+        position: 'absolute',
+        width: 24,
+        height: 24,
+        borderColor: '#00FF00',
+    },
+    cornerTL: {
+        top: -2,
+        left: -2,
+        borderTopWidth: 4,
+        borderLeftWidth: 4,
+        borderTopLeftRadius: 8,
+    },
+    cornerTR: {
+        top: -2,
+        right: -2,
+        borderTopWidth: 4,
+        borderRightWidth: 4,
+        borderTopRightRadius: 8,
+    },
+    cornerBL: {
+        bottom: -2,
+        left: -2,
+        borderBottomWidth: 4,
+        borderLeftWidth: 4,
+        borderBottomLeftRadius: 8,
+    },
+    cornerBR: {
+        bottom: -2,
+        right: -2,
+        borderBottomWidth: 4,
+        borderRightWidth: 4,
+        borderBottomRightRadius: 8,
+    },
+    stableIndicator: {
+        position: 'absolute',
+        top: -30,
+        alignSelf: 'center',
+        backgroundColor: '#00FF00',
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    stableText: {
+        color: '#000',
+        fontSize: 14,
+        fontWeight: 'bold',
     },
     closeButton: {
         position: 'absolute',

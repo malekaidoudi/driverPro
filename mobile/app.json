@@ -14,18 +14,23 @@
       "bundleIdentifier": "com.driverpro.app",
       "deploymentTarget": "15.5",
       "config": {
-        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        "googleMapsApiKey": "AIzaSyCTjfrPmdPuJN2v2WBXcfCFpo_hw6L0j0o"
       },
       "infoPlist": {
         "NSCameraUsageDescription": "DriverPro needs camera access to scan addresses and labels.",
-        "NSSpeechRecognitionUsageDescription": "DriverPro uses speech recognition to dictate addresses."
+        "NSSpeechRecognitionUsageDescription": "DriverPro uses speech recognition to dictate addresses.",
+        "LSApplicationQueriesSchemes": [
+          "comgooglemaps",
+          "waze",
+          "maps"
+        ]
       }
     },
     "android": {
       "package": "com.driverpro.app",
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+          "apiKey": "AIzaSyCTjfrPmdPuJN2v2WBXcfCFpo_hw6L0j0o"
         }
       },
       "permissions": [

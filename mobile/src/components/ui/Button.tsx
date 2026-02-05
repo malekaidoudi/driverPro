@@ -9,8 +9,9 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../hooks/useTheme';
+import { componentSizes, radius, shadows } from '../../theme/tokens';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
 type ButtonSize = 'default' | 'small' | 'icon';
 
 interface ButtonProps {
@@ -40,7 +41,7 @@ export const Button: React.FC<ButtonProps> = ({
     textStyle,
     haptic = true,
 }) => {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
 
     const handlePress = () => {
         if (haptic) {
@@ -50,68 +51,87 @@ export const Button: React.FC<ButtonProps> = ({
     };
 
     const getBackgroundColor = (): string => {
-        if (disabled) return colors.border;
+        if (disabled) return colors.bgElevated;
         switch (variant) {
             case 'primary':
                 return colors.primary;
             case 'secondary':
-                return colors.surface;
+                return colors.bgTertiary;
             case 'ghost':
                 return 'transparent';
             case 'danger':
-                return colors.danger;
+                return isDark ? 'transparent' : colors.bgPrimary;
+            case 'success':
+                return colors.success;
             default:
                 return colors.primary;
         }
     };
 
     const getTextColor = (): string => {
-        if (disabled) return colors.textSecondary;
+        if (disabled) return colors.textTertiary;
         switch (variant) {
             case 'primary':
-            case 'danger':
-                return '#FFFFFF';
+            case 'success':
+                return colors.textInverse;
             case 'secondary':
                 return colors.textPrimary;
             case 'ghost':
                 return colors.primary;
+            case 'danger':
+                return colors.danger;
             default:
-                return '#FFFFFF';
+                return colors.textInverse;
         }
     };
 
-    const getBorderColor = (): string => {
-        if (variant === 'secondary') return colors.border;
-        return 'transparent';
+    const getBorderStyle = (): { borderColor: string; borderWidth: number } => {
+        switch (variant) {
+            case 'secondary':
+                return { borderColor: colors.border, borderWidth: 1 };
+            case 'danger':
+                return { borderColor: colors.danger, borderWidth: 2 };
+            default:
+                return { borderColor: 'transparent', borderWidth: 0 };
+        }
     };
 
     const getHeight = (): number => {
         switch (size) {
             case 'small':
-                return 44;
+                return componentSizes.button.heightSm;
             case 'icon':
-                return 44;
+                return componentSizes.button.heightSm;
             default:
-                return 56;
+                return componentSizes.button.height;
         }
     };
 
+    const getShadow = () => {
+        if (disabled || variant === 'ghost' || variant === 'secondary') return {};
+        const shadowSet = isDark ? shadows.dark : shadows.light;
+        return shadowSet.md;
+    };
+
+    const borderStyle = getBorderStyle();
+
     const containerStyle: ViewStyle = {
         backgroundColor: getBackgroundColor(),
-        borderColor: getBorderColor(),
-        borderWidth: variant === 'secondary' ? 1 : 0,
+        borderColor: borderStyle.borderColor,
+        borderWidth: borderStyle.borderWidth,
         height: getHeight(),
-        minWidth: size === 'icon' ? 44 : undefined,
-        borderRadius: size === 'icon' ? 22 : 12,
-        paddingHorizontal: size === 'icon' ? 0 : 24,
+        minWidth: size === 'icon' ? componentSizes.touchTarget.min : undefined,
+        borderRadius: size === 'icon' ? radius.full : radius.lg,
+        paddingHorizontal: size === 'icon' ? 0 : componentSizes.button.paddingX,
         opacity: disabled ? 0.5 : 1,
+        ...getShadow(),
     };
 
     const labelStyle: TextStyle = {
         color: getTextColor(),
         fontSize: 16,
-        fontWeight: '700',
-        fontFamily: 'Inter-Bold',
+        fontWeight: '600',
+        fontFamily: 'Inter',
     };
 
     return (
@@ -119,7 +139,7 @@ export const Button: React.FC<ButtonProps> = ({
             style={[styles.container, containerStyle, style]}
             onPress={handlePress}
             disabled={disabled || loading}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
         >
             {loading ? (
                 <ActivityIndicator color={getTextColor()} />
