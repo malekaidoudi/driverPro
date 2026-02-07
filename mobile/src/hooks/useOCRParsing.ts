@@ -1126,12 +1126,28 @@ function computeConfidence(candidates: FieldCandidates, result: Omit<ParsedAddre
 }
 
 // =============================================================================
-// MAIN PARSER
+// MAIN PARSER (with memoization cache)
 // =============================================================================
+
+// OPTIMIZATION: Memoization cache for parsed results
+const parseCache = new Map<string, ParsedAddress>();
+const CACHE_MAX_SIZE = 50; // Keep last 50 results
+
+function getCacheKey(text: string): string {
+  // Normalize text for cache key (trim, collapse whitespace)
+  return text.trim().replace(/\s+/g, ' ').substring(0, 500);
+}
 
 export function parseOCRText(rawText: string): ParsedAddress {
   if (!rawText || typeof rawText !== 'string') {
     return createEmptyResult();
+  }
+
+  // OPTIMIZATION: Check cache first
+  const cacheKey = getCacheKey(rawText);
+  const cached = parseCache.get(cacheKey);
+  if (cached) {
+    return { ...cached }; // Return copy to avoid mutations
   }
 
   const { lines, fullText } = tokenize(rawText);
@@ -1171,6 +1187,15 @@ export function parseOCRText(rawText: string): ParsedAddress {
 
   const result = buildAddress(candidates);
   result.rawText = rawText; // Store original for debugging
+
+  // OPTIMIZATION: Store in cache (with size limit)
+  if (parseCache.size >= CACHE_MAX_SIZE) {
+    // Remove oldest entry
+    const firstKey = parseCache.keys().next().value;
+    if (firstKey) parseCache.delete(firstKey);
+  }
+  parseCache.set(cacheKey, { ...result });
+
   return result;
 }
 

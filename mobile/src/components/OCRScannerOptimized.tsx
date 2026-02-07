@@ -78,9 +78,15 @@ const ROI_SPRING_CONFIG = { damping: 15, stiffness: 150 };
 
 // Performance tuning
 const TARGET_FPS = 15;                 // Camera FPS (frame processor runs on each frame)
-const STABILITY_THRESHOLD = 2;         // 2 similar results = validated
+const STABILITY_THRESHOLD = 3;         // 3 similar results = validated (was 2)
 const MIN_TEXT_LENGTH = 15;            // Minimum chars to process
 const DEBOUNCE_MS = 150;               // Debounce OCR calls
+
+// OPTIMIZATION: Production-grade settings
+const FRAME_SKIP_INTERVAL = 3;         // Process 1 frame out of 3 (÷3 CPU)
+const ROI_CONFIDENCE_THRESHOLD = 0.7;  // Min ROI confidence to trigger OCR
+const PARSE_CONFIDENCE_THRESHOLD = 0.75; // Min parsing confidence to accept
+const FUZZY_MATCH_THRESHOLD = 0.85;    // Similarity threshold for stability
 
 // ============================================================================
 // TYPES
@@ -134,6 +140,12 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const isValidatedRef = useRef(false);
     const rapidCooldownRef = useRef(false); // Prevent duplicate scans in rapid mode
 
+    // OPTIMIZATION: Frame skipping & Lazy OCR refs
+    const frameCountRef = useRef(0);
+    const roiConfidenceRef = useRef(0);
+    const roiStableRef = useRef(false);
+    const lastOCRTextRef = useRef<string>(''); // For memoization
+
     // Dynamic ROI Tracker
     const { updateROI, reset: resetROI } = useROITracker();
     const [dynamicROI, setDynamicROI] = useState<BoundingBox | null>(null);
@@ -161,22 +173,45 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     ]);
 
     // ========================================================================
-    // OCR HANDLER (JS Thread)
+    // OCR HANDLER (JS Thread) - With Production Optimizations
     // ========================================================================
     const handleOCRResult = useCallback((text: string) => {
         // Skip if already validated
         if (isValidatedRef.current) return;
 
+        // =====================================================================
+        // OPTIMIZATION 1: Frame Skipping - Process 1 frame out of N
+        // =====================================================================
+        frameCountRef.current++;
+        if (frameCountRef.current % FRAME_SKIP_INTERVAL !== 0) {
+            return; // Skip this frame
+        }
+
+        // =====================================================================
+        // OPTIMIZATION 2: Lazy OCR - Skip if ROI not stable (after warmup)
+        // =====================================================================
+        if (frameCountRef.current > 15) { // After warmup period
+            const hasGoodConfidence = roiConfidenceRef.current >= ROI_CONFIDENCE_THRESHOLD;
+            const isStable = roiStableRef.current;
+
+            if (!isStable && !hasGoodConfidence) {
+                setGuidanceMessage('Stabilisation...');
+                return; // Skip - ROI not ready
+            }
+        }
+
+        // =====================================================================
+        // OPTIMIZATION 3: Memoization - Skip if same text as last time
+        // =====================================================================
+        if (text === lastOCRTextRef.current) {
+            return; // Same text, skip parsing
+        }
+        lastOCRTextRef.current = text;
+
         // Debounce check
         const now = Date.now();
         if (now - lastProcessTimeRef.current < DEBOUNCE_MS) return;
         lastProcessTimeRef.current = now;
-
-        // Log raw OCR text for debugging
-        console.log('[OCR-RAW] ==================');
-        console.log('[OCR-RAW] Text length:', text?.length || 0);
-        console.log('[OCR-RAW] Content:', text);
-        console.log('[OCR-RAW] ==================');
 
         // DEBUG: Show raw text on screen
         setDebugText(text?.substring(0, 500) || '');
@@ -193,6 +228,15 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
         // Parse OCR text
         const parsed = parseOCRText(text);
 
+        // =====================================================================
+        // OPTIMIZATION 4: Confidence Gating - Reject low confidence results
+        // =====================================================================
+        if (parsed.confidence < PARSE_CONFIDENCE_THRESHOLD) {
+            setGuidanceMessage(`Confiance faible (${Math.round(parsed.confidence * 100)}%)`);
+            setScannerState('ready');
+            return; // Skip - parsing confidence too low
+        }
+
         // DEBUG: Show parsed result on screen
         setDebugParsed(
             `Rue: ${parsed.street || '-'}\n` +
@@ -200,7 +244,8 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             `Ville: ${parsed.city || '-'}\n` +
             `Tél: ${parsed.phoneNumber || '-'}\n` +
             `Nom: ${parsed.firstName || ''} ${parsed.lastName || '-'}\n` +
-            `Société: ${parsed.companyName || '-'}`
+            `Société: ${parsed.companyName || '-'}\n` +
+            `📊 Confiance: ${Math.round(parsed.confidence * 100)}%`
         );
 
         // Early exit: no valid address
@@ -212,15 +257,17 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             return;
         }
 
-        // Stability check
-        if (lastResultRef.current && areResultsSimilar(lastResultRef.current, parsed)) {
+        // =====================================================================
+        // OPTIMIZATION 5: Stabilisation Renforcée - 3 frames + fuzzy 85%
+        // =====================================================================
+        if (lastResultRef.current && areResultsSimilar(lastResultRef.current, parsed, FUZZY_MATCH_THRESHOLD)) {
             stabilityCountRef.current += 1;
         } else {
             stabilityCountRef.current = 1;
         }
         lastResultRef.current = parsed;
 
-        // Validated: 2 similar consecutive results
+        // Validated: N similar consecutive results (STABILITY_THRESHOLD = 3)
         if (stabilityCountRef.current >= STABILITY_THRESHOLD) {
             // Rapid mode: show confirmation overlay instead of auto-adding
             if (rapidMode && onRapidAdd) {
@@ -298,6 +345,10 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             setDynamicROI(screenROI);
             setRoiIsStable(roiState.isStable);
 
+            // OPTIMIZATION: Store ROI state in refs for lazy OCR
+            roiConfidenceRef.current = roiState.confidence;
+            roiStableRef.current = roiState.isStable;
+
             // Update animated values with spring animation
             roiX.value = withSpring(screenROI.x, ROI_SPRING_CONFIG);
             roiY.value = withSpring(screenROI.y, ROI_SPRING_CONFIG);
@@ -323,7 +374,7 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const frameProcessor = useFrameProcessor((frame) => {
         'worklet';
 
-        // Run ML Kit OCR on frame
+        // Run ML Kit OCR on frame (lightweight, needed for ROI tracking)
         const results = scanText(frame);
 
         // ML Kit returns object: { resultText: string, blocks: [...] }
@@ -331,23 +382,17 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             const fullText = (results as any).resultText || '';
             const blocks = (results as any).blocks;
 
-            if (ROI_DEBUG && fullText.length > 0) {
-                logOCRDebugWorklet(`[OCR] Text: ${fullText.substring(0, 80)}...`);
-                if (blocks) {
-                    logOCRDebugWorklet(`[OCR] Blocks count: ${Array.isArray(blocks) ? blocks.length : 'N/A'}`);
-                }
+            // ALWAYS update ROI first (needed for stability tracking)
+            if (DYNAMIC_ROI_ENABLED && blocks) {
+                handleROIUpdateWorklet(results, frame.width, frame.height);
             }
 
+            // Pass text to JS thread for processing (frame skip logic is there)
             if (fullText.length > 0) {
                 handleOCRResultWorklet(fullText);
-
-                // Update dynamic ROI if enabled - pass the full result object
-                if (DYNAMIC_ROI_ENABLED && blocks) {
-                    handleROIUpdateWorklet(results, frame.width, frame.height);
-                }
             }
         }
-    }, [scanText, handleOCRResultWorklet, handleROIUpdateWorklet, logOCRDebugWorklet]);
+    }, [scanText, handleOCRResultWorklet, handleROIUpdateWorklet]);
 
     // ========================================================================
     // ANIMATED ROI STYLE
