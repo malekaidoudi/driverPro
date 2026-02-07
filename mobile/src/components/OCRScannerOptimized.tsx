@@ -45,11 +45,11 @@ import { Worklets } from 'react-native-worklets-core';
 import * as Haptics from 'expo-haptics';
 import { X, MagnifyingGlassPlus, MagnifyingGlassMinus, Flashlight, Check, PencilSimple, Phone, MapPin, User, Buildings } from 'phosphor-react-native';
 import {
-    parseOCRText,
     hasValidAddress,
     areResultsSimilar,
     ParsedAddress as ParsedOCRData,
 } from '../hooks/useOCRParsing';
+import { parseAsync, cancelAllJobs } from '../workers/parserWorker';
 import {
     useROITracker,
     ocrResultToTextBlocks,
@@ -57,6 +57,9 @@ import {
     BoundingBox,
 } from '../hooks/useROITracker';
 import { logOCRTest } from '../services/ocrTestLogger';
+
+// Worker parsing state
+let parsingInProgress = false;
 
 // ============================================================================
 // CONFIGURATION
@@ -173,11 +176,18 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     ]);
 
     // ========================================================================
-    // OCR HANDLER (JS Thread) - With Production Optimizations
+    // OCR HANDLER (JS Thread) - With Production Optimizations + Worker
     // ========================================================================
-    const handleOCRResult = useCallback((text: string) => {
+    const handleOCRResult = useCallback(async (text: string) => {
         // Skip if already validated
         if (isValidatedRef.current) return;
+
+        // =====================================================================
+        // OPTIMIZATION 6: Worker - Skip if parsing already in progress
+        // =====================================================================
+        if (parsingInProgress) {
+            return; // Don't queue multiple parses
+        }
 
         // =====================================================================
         // OPTIMIZATION 1: Frame Skipping - Process 1 frame out of N
@@ -225,8 +235,22 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
         setScannerState('processing');
         setGuidanceMessage('Analyse...');
 
-        // Parse OCR text
-        const parsed = parseOCRText(text);
+        // =====================================================================
+        // OPTIMIZATION 6: Worker - Parse OCR text off UI thread
+        // =====================================================================
+        parsingInProgress = true;
+        let parsed: ParsedOCRData;
+        try {
+            parsed = await parseAsync(text);
+        } catch (error) {
+            parsingInProgress = false;
+            setScannerState('ready');
+            return;
+        }
+        parsingInProgress = false;
+
+        // Check if we got validated while parsing
+        if (isValidatedRef.current) return;
 
         // =====================================================================
         // OPTIMIZATION 4: Confidence Gating - Reject low confidence results
@@ -434,6 +458,14 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             stabilityCountRef.current = 0;
             isValidatedRef.current = false;
             rapidCooldownRef.current = false;
+            // Reset worker state
+            frameCountRef.current = 0;
+            roiConfidenceRef.current = 0;
+            roiStableRef.current = false;
+            lastOCRTextRef.current = '';
+            parsingInProgress = false;
+            cancelAllJobs(); // Cancel any pending parse jobs
+
             setScannerState('ready');
             setGuidanceMessage(rapidMode ? 'Mode rafale - Scannez les colis' : 'Visez une étiquette...');
             if (rapidMode) {
@@ -450,6 +482,10 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             roiWidth.value = ROI_WIDTH;
             roiHeight.value = ROI_HEIGHT;
             roiStable.value = 0;
+        } else {
+            // Scanner closing - cancel pending jobs
+            cancelAllJobs();
+            parsingInProgress = false;
         }
     }, [isVisible, rapidMode, resetROI, roiX, roiY, roiWidth, roiHeight, roiStable]);
 
