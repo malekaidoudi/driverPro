@@ -456,8 +456,15 @@ function scoreAsStreet(line: string): number {
     score += 0.25;
   }
 
-  const streetNumberPattern = /^\d{1,4}\s*(bis|ter|quater)?[\s,]+/i;
-  if (streetNumberPattern.test(line)) {
+  // Street number at START: "56 rue de collonges"
+  const streetNumberStartPattern = /^\d{1,4}\s*(bis|ter|quater)?[\s,]+/i;
+  if (streetNumberStartPattern.test(line)) {
+    score += 0.15;
+  }
+
+  // Street number at END: "rue de collonges 56" or "rue de collonges 56 bis"
+  const streetNumberEndPattern = /\s+\d{1,4}\s*(bis|ter|quater)?\s*$/i;
+  if (streetNumberEndPattern.test(line)) {
     score += 0.15;
   }
 
@@ -810,6 +817,8 @@ function extractStreet(context: ExtractionContext): Candidate<string>[] {
   const streetPatterns = [
     // Pattern with street number first: "2 RUE DE L'ESPERANCE"
     /(\d{1,4}\s*(bis|ter|quater)?\s*,?\s*(rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+[^,\n]{3,40})/gi,
+    // Pattern with street number LAST: "rue de collonges 56" or "avenue jean jaures 123 bis"
+    /((rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+(de\s+)?(l['\s])?[a-zA-ZÀ-ÿ\s]{3,35}\s+\d{1,4}\s*(bis|ter|quater)?)/gi,
     // Pattern without number: "RUE DE L'ESPERANCE"
     /((rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+(de\s+)?(l['\s])?[a-zA-ZÀ-ÿ\s]{3,40})/gi,
     // Pattern with "DE" variations: "RUE DEL ESPERANCE", "RUE DE L ESPERANCE"
