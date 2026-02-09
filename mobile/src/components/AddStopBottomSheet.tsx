@@ -20,7 +20,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { PlacePrediction, StopType, StopPriority } from '../types';
 import { servicesApi } from '../services/api';
 import OCRScanner from './OCRScannerOptimized';
-import { ParsedOCRData, parseOCRText, hasValidAddress } from '../hooks/useOCRParsing';
+import { ParsedAddress, parseOCRText, hasValidAddress } from '../hooks/useOCRParsing';
 
 type ExistingStop = {
     address: string;
@@ -31,6 +31,7 @@ type ExistingStop = {
 
 export type AddStopBottomSheetRef = {
     present: () => void;
+    presentWithScanner: () => void; // Open with OCR scanner visible
     close: () => void;
     reset: () => void;
 };
@@ -78,13 +79,17 @@ type AddStopBottomSheetProps = {
     initialFirstName?: string;
     initialLastName?: string;
     initialPhoneNumber?: string;
+    // Mode scan rapide: auto-ajout et mise à jour
+    autoAddOnScan?: boolean;
     showActions?: boolean;
     existingStops?: ExistingStop[];
 
-    onPressAdd?: (payload: StopPayload) => Promise<void> | void;
+    onPressAdd?: (payload: StopPayload) => Promise<string | void> | string | void; // Returns stopId if auto-add
+    onUpdateStop?: (stopId: string, payload: StopPayload) => Promise<void> | void;
     onPressChangeAddress?: () => void;
     onPressDuplicateStop?: () => Promise<void> | void;
     onPressDeleteStop?: () => Promise<void> | void;
+    onDismissAfterScan?: () => void; // Called when sheet is dismissed after scan to reopen camera
 };
 
 export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBottomSheetProps>(function AddStopBottomSheet(
@@ -105,11 +110,14 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         initialLastName = '',
         initialPhoneNumber = '',
         showActions = false,
+        autoAddOnScan = false,
         existingStops = [],
         onPressAdd,
+        onUpdateStop,
         onPressChangeAddress,
         onPressDuplicateStop,
         onPressDeleteStop,
+        onDismissAfterScan,
     },
     ref
 ) {
@@ -136,6 +144,10 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'processing'>('idle');
     const [ocrScannerVisible, setOcrScannerVisible] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    // Auto-add mode: track if stop was auto-added and needs update on dismiss
+    const [autoAddedStopId, setAutoAddedStopId] = useState<string | null>(null);
+    const scanModeRef = useRef(false); // Track if we came from OCR scan
 
     // Business opening hours (personnes morales)
     const [isCompany, setIsCompany] = useState(false);
@@ -181,6 +193,13 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         () => ({
             present: () => {
                 resetForm();
+                setOcrScannerVisible(false);
+                modalRef.current?.present();
+            },
+            presentWithScanner: () => {
+                resetForm();
+                setOcrScannerVisible(true);
+                scanModeRef.current = true;
                 modalRef.current?.present();
             },
             close: () => modalRef.current?.dismiss(),
@@ -337,12 +356,22 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setOcrScannerVisible(true);
     }, [autoAddPendingStop]);
 
-    const handleOCRDetected = useCallback(async (data: ParsedOCRData) => {
+    const handleOCRDetected = useCallback(async (data: ParsedAddress) => {
         setOcrScannerVisible(false);
         skipAutocompleteRef.current = true;
         setPredictions([]);
+        scanModeRef.current = true; // Mark that we came from OCR scan
 
         // Reset tous les champs pour un nouveau stop
+        let newFirstName = '';
+        let newLastName = '';
+        let newPhoneNumber = '';
+        let newNotes = '';
+        const newPackageCount = 1;
+        const newOrder: StopOrder = 'auto';
+        const newType = StopType.DELIVERY;
+        const newDurationMinutes = 3;
+
         setFirstName('');
         setLastName('');
         setPhoneNumber('');
@@ -352,81 +381,91 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setType(StopType.DELIVERY);
         setDurationMinutes(3);
 
-        let finalAddress = data.address || '';
+        // Build address from parsed fields or use fullAddress
+        const ocrAddress = data.fullAddress || [data.street, data.postalCode, data.city].filter(Boolean).join(', ');
+        let finalAddress = ocrAddress;
+        let geocodedLat = 0;
+        let geocodedLng = 0;
 
-        if (data.address) {
-            setAddress(data.address);
+        if (ocrAddress) {
+            setAddress(ocrAddress);
 
             // Geocode the detected address (only for coordinates, keep OCR address)
             try {
-                const geocodeResult = await servicesApi.geocodeAddress(data.address);
+                const geocodeResult = await servicesApi.geocodeAddress(ocrAddress);
                 if (geocodeResult.latitude && geocodeResult.longitude) {
-                    setLatitude(geocodeResult.latitude);
-                    setLongitude(geocodeResult.longitude);
+                    geocodedLat = geocodeResult.latitude;
+                    geocodedLng = geocodeResult.longitude;
+                    setLatitude(geocodedLat);
+                    setLongitude(geocodedLng);
                     hasPendingStopRef.current = true;
-                    // ⚠️ NE PAS remplacer l'adresse OCR par Google formatted_address
-                    // Google peut retourner une adresse différente (ex: rue voisine)
-                    // On garde l'adresse OCR originale pour la cohérence
                     if (geocodeResult.formatted_address) {
                         finalAddress = geocodeResult.formatted_address;
-                        // setAddress(geocodeResult.formatted_address); // ← DÉSACTIVÉ
-                    }
-
-                    // Vérifier si l'adresse existe déjà
-                    const duplicate = checkDuplicateAddress(geocodeResult.latitude, geocodeResult.longitude);
-                    if (duplicate) {
-                        Alert.alert(
-                            'Adresse existante',
-                            'Cette adresse existe déjà dans la tournée. Voulez-vous créer un autre arrêt à cette adresse ?',
-                            [
-                                {
-                                    text: 'Annuler', style: 'cancel', onPress: () => {
-                                        setAddress('');
-                                        setLatitude(0);
-                                        setLongitude(0);
-                                        hasPendingStopRef.current = false;
-                                    }
-                                },
-                                {
-                                    text: 'Dupliquer', onPress: () => {
-                                        setOrder(getOrderForDuplicate(duplicate.order));
-                                    }
-                                },
-                            ]
-                        );
                     }
                 }
             } catch (e) {
-                // Keep the raw address if geocoding fails
                 console.warn('Geocoding failed:', e);
             }
         }
 
         // Remplir les infos contact/société si détectées
-        if (data.isCompany && data.companyName) {
-            // Personne morale: mettre le nom de société dans lastName + activer horaires
+        if (data.companyName) {
+            newLastName = data.companyName;
             setFirstName('');
             setLastName(data.companyName);
             setIsCompany(true);
-            // Horaires par défaut déjà définis dans le state
-            console.log('[OCR] Company detected:', data.companyName);
         } else {
-            // Personne physique: prénom + nom
             setIsCompany(false);
-            if (data.firstName) setFirstName(data.firstName);
-            if (data.lastName) setLastName(data.lastName);
+            if (data.firstName) {
+                newFirstName = data.firstName;
+                setFirstName(data.firstName);
+            }
+            if (data.lastName) {
+                newLastName = data.lastName;
+                setLastName(data.lastName);
+            }
         }
-        if (data.phoneNumber) setPhoneNumber(data.phoneNumber);
+        if (data.phoneNumber) {
+            newPhoneNumber = data.phoneNumber;
+            setPhoneNumber(data.phoneNumber);
+        }
 
-        // Notes = annexe d'adresse uniquement (bâtiment, villa, lotissement, etc.)
-        // Priorité: OCR annex > extraction de l'adresse formatée > extraction de l'adresse brute
+        // Notes = annexe d'adresse
         const annex = data.addressAnnex
             ?? extractAnnexFromAddress(finalAddress)
-            ?? (data.address ? extractAnnexFromAddress(data.address) : null);
+            ?? extractAnnexFromAddress(ocrAddress);
         if (annex) {
+            newNotes = annex;
             setNotes(annex);
         }
-    }, [checkDuplicateAddress, getOrderForDuplicate]);
+
+        // Auto-add mode: add the stop immediately
+        if (autoAddOnScan && geocodedLat !== 0 && geocodedLng !== 0 && onPressAdd) {
+            try {
+                const payload: StopPayload = {
+                    address: finalAddress,
+                    latitude: geocodedLat,
+                    longitude: geocodedLng,
+                    notes: newNotes,
+                    packageCount: newPackageCount,
+                    order: newOrder,
+                    type: newType,
+                    priority: StopPriority.NORMAL,
+                    durationMinutes: newDurationMinutes,
+                    firstName: newFirstName || undefined,
+                    lastName: newLastName || undefined,
+                    phoneNumber: newPhoneNumber || undefined,
+                };
+                const result = await onPressAdd(payload);
+                if (typeof result === 'string') {
+                    setAutoAddedStopId(result);
+                }
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (e) {
+                console.error('[OCR] Auto-add failed:', e);
+            }
+        }
+    }, [autoAddOnScan, onPressAdd]);
 
     const handleOCRClose = useCallback(() => {
         setOcrScannerVisible(false);
@@ -457,7 +496,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setNotes('');
 
         // Fill form with parsed data (company or individual)
-        if (parsed.isCompany && parsed.companyName) {
+        if (parsed.companyName) {
             // Personne morale: mettre le nom de société dans lastName + activer horaires
             setLastName(parsed.companyName);
             setIsCompany(true);
@@ -471,15 +510,18 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
         if (parsed.addressAnnex) setNotes(parsed.addressAnnex);
 
+        // Build address from parsed fields
+        const voiceAddress = parsed.fullAddress || [parsed.street, parsed.postalCode, parsed.city].filter(Boolean).join(', ');
+
         // Set address and geocode
-        if (parsed.address) {
-            setAddress(parsed.address);
+        if (voiceAddress) {
+            setAddress(voiceAddress);
             setLatitude(0);
             setLongitude(0);
 
             // Geocode the parsed address
             try {
-                const geocodeResult = await servicesApi.geocodeAddress(parsed.address);
+                const geocodeResult = await servicesApi.geocodeAddress(voiceAddress);
                 if (geocodeResult.latitude && geocodeResult.longitude) {
                     setLatitude(geocodeResult.latitude);
                     setLongitude(geocodeResult.longitude);
@@ -575,6 +617,45 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
 
     const textSecondary = colors.textSecondary;
 
+    // Handle sheet dismiss: update stop if auto-added, then reopen camera
+    const handleSheetChange = useCallback(async (index: number) => {
+        if (index === -1) { // Sheet dismissed
+            const shouldReopenScanner = scanModeRef.current && onDismissAfterScan;
+            const stopIdToUpdate = autoAddedStopId;
+
+            // Reset state immediately to avoid stale closures
+            setAutoAddedStopId(null);
+            scanModeRef.current = false;
+
+            // Update the auto-added stop with any changes (fire and forget)
+            if (stopIdToUpdate && onUpdateStop) {
+                Promise.resolve(onUpdateStop(stopIdToUpdate, {
+                    address: address.trim(),
+                    latitude,
+                    longitude,
+                    notes: notes.trim(),
+                    packageCount,
+                    order,
+                    type,
+                    priority,
+                    durationMinutes,
+                    firstName: firstName.trim() || undefined,
+                    lastName: lastName.trim() || undefined,
+                    phoneNumber: phoneNumber.trim() || undefined,
+                    timeWindowStart: timeWindowStart.trim() || undefined,
+                    timeWindowEnd: timeWindowEnd.trim() || undefined,
+                })).catch((e: unknown) => {
+                    console.warn('[AddStop] Update failed (stop was already added):', e);
+                });
+            }
+
+            // Reopen camera for next scan
+            if (shouldReopenScanner) {
+                onDismissAfterScan();
+            }
+        }
+    }, [autoAddedStopId, onUpdateStop, onDismissAfterScan, address, latitude, longitude, notes, packageCount, order, type, priority, durationMinutes, firstName, lastName, phoneNumber, timeWindowStart, timeWindowEnd]);
+
     return (
         <BottomSheetModal
             ref={modalRef}
@@ -582,6 +663,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
             enablePanDownToClose
             backgroundStyle={{ backgroundColor: colors.surface }}
             handleIndicatorStyle={{ backgroundColor: colors.textSecondary }}
+            onChange={handleSheetChange}
         >
             <BottomSheetScrollView
                 contentContainerStyle={{
@@ -590,9 +672,16 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                 }}
                 keyboardShouldPersistTaps="handled"
             >
-                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700', marginBottom: 12 }}>
-                    {title}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '700' }}>
+                        {title}
+                    </Text>
+                    {autoAddedStopId && (
+                        <View style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 }}>
+                            <Text style={{ color: '#351C15', fontSize: 12, fontWeight: '700' }}>Ajouté</Text>
+                        </View>
+                    )}
+                </View>
 
                 <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Adresse</Text>
 
@@ -615,7 +704,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                         onChangeText={handleAddressChange}
                         placeholder="Ajouter ou trouver des arrêts"
                         placeholderTextColor={textSecondary}
-                        editable={latitude === 0 || longitude === 0}
+                        editable={autoAddedStopId !== null || latitude === 0 || longitude === 0}
                         style={{
                             flex: 1,
                             color: colors.textPrimary,
@@ -688,51 +777,6 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     </View>
                 )}
 
-                {latitude !== 0 && longitude !== 0 && (
-                    <View style={{ marginBottom: 12, backgroundColor: colors.background, borderRadius: 12, padding: 12 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <View style={{ flex: 1, marginRight: 12 }}>
-                                <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '800', marginBottom: 4 }} numberOfLines={2}>
-                                    {address.trim().split(',')[0]}
-                                </Text>
-                                <Text style={{ color: textSecondary, fontSize: 11 }} numberOfLines={2}>
-                                    {address.trim()}
-                                </Text>
-                                <Text style={{ color: colors.primary, fontSize: 10, marginTop: 4 }}>
-                                    ✓ Adresse confirmée
-                                </Text>
-                            </View>
-                            <View style={{ flexDirection: 'row', gap: 8 }}>
-                                <TouchableOpacity
-                                    onPress={handleModifyAddress}
-                                    style={{
-                                        width: 36,
-                                        height: 36,
-                                        borderRadius: 18,
-                                        backgroundColor: colors.surface,
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}
-                                >
-                                    <PencilSimple size={18} color={colors.textPrimary} weight="bold" />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    onPress={handleDeleteAddress}
-                                    style={{
-                                        width: 36,
-                                        height: 36,
-                                        borderRadius: 18,
-                                        backgroundColor: '#DC262620',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}
-                                >
-                                    <Trash size={18} color="#DC2626" weight="bold" />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </View>
-                )}
 
                 <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
                     <View style={{ flex: 1 }}>
@@ -1056,53 +1100,50 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     </View>
                 )}
 
-                {showActions && (
-                    <>
-                        <TouchableOpacity
-                            onPress={onPressChangeAddress}
-                            style={{
-                                backgroundColor: colors.background,
-                                padding: 14,
-                                borderRadius: 12,
-                                marginBottom: 12,
-                            }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '800' }}>Changer l'adresse</Text>
-                        </TouchableOpacity>
+                {/* Action Buttons - Always visible */}
+                <View style={{ marginTop: 20, gap: 10 }}>
+                    <TouchableOpacity
+                        onPress={onPressChangeAddress}
+                        style={{
+                            backgroundColor: colors.surface,
+                            padding: 14,
+                            borderRadius: 12,
+                        }}
+                    >
+                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', textAlign: 'left' }}>Modifier l'arrêt</Text>
+                    </TouchableOpacity>
 
-                        <TouchableOpacity
-                            onPress={onPressDuplicateStop}
-                            style={{
-                                backgroundColor: colors.background,
-                                padding: 14,
-                                borderRadius: 12,
-                                marginBottom: 12,
-                            }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '800' }}>Dupliquer l'arrêt</Text>
-                        </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={onPressDuplicateStop}
+                        style={{
+                            backgroundColor: colors.surface,
+                            padding: 14,
+                            borderRadius: 12,
+                        }}
+                    >
+                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', textAlign: 'left' }}>Dupliquer l'arrêt</Text>
+                    </TouchableOpacity>
 
-                        <TouchableOpacity
-                            onPress={() => {
-                                Alert.alert('Supprimer', 'Supprimer cet arrêt ?', [
-                                    { text: 'Annuler', style: 'cancel' },
-                                    {
-                                        text: 'Supprimer',
-                                        style: 'destructive',
-                                        onPress: () => onPressDeleteStop?.(),
-                                    },
-                                ]);
-                            }}
-                            style={{
-                                backgroundColor: '#DC2626',
-                                padding: 14,
-                                borderRadius: 12,
-                            }}
-                        >
-                            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '900' }}>Supprimer l'arrêt</Text>
-                        </TouchableOpacity>
-                    </>
-                )}
+                    <TouchableOpacity
+                        onPress={() => {
+                            Alert.alert('Supprimer', 'Supprimer cet arrêt ?', [
+                                { text: 'Annuler', style: 'cancel' },
+                                {
+                                    text: 'Supprimer',
+                                    style: 'destructive',
+                                    onPress: () => onPressDeleteStop?.(),
+                                },
+                            ]);
+                        }}
+                        style={{
+                            backgroundColor: 'transparent',
+                            padding: 14,
+                            borderRadius: 12,
+                        }}
+                    >
+                        <Text style={{ color: '#DC2626', fontSize: 14, fontWeight: '700', textAlign: 'left' }}>Supprimer l'arrêt </Text>
+                    </TouchableOpacity>
+                </View>
             </BottomSheetScrollView>
 
             {/* OCR Scanner Modal */}

@@ -36,8 +36,8 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="driverpro"/>
-        <data android:scheme="exp+driverpro"/>
+        <data android:scheme="upsdriver"/>
+        <data android:scheme="exp+upsdriver"/>
       </intent-filter>
     </activity>
     <uses-library android:name="org.apache.http.legacy" android:required="false"/>

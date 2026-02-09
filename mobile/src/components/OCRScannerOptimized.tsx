@@ -87,7 +87,7 @@ const DEBOUNCE_MS = 150;               // Debounce OCR calls
 
 // OPTIMIZATION: Production-grade settings
 const FRAME_SKIP_INTERVAL = 3;         // Process 1 frame out of 3 (÷3 CPU)
-const ROI_CONFIDENCE_THRESHOLD = 0.7;  // Min ROI confidence to trigger OCR
+const ROI_CONFIDENCE_THRESHOLD = 0.4;  // Min ROI confidence to trigger OCR (lowered for better detection)
 const PARSE_CONFIDENCE_THRESHOLD = 0.75; // Min parsing confidence to accept
 const FUZZY_MATCH_THRESHOLD = 0.85;    // Similarity threshold for stability
 
@@ -198,16 +198,13 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
         }
 
         // =====================================================================
-        // OPTIMIZATION 2: Lazy OCR - Skip if ROI not stable (after warmup)
+        // OPTIMIZATION 2: Lazy OCR - Skip only if no text detected at all
         // =====================================================================
-        if (frameCountRef.current > 15) { // After warmup period
-            const hasGoodConfidence = roiConfidenceRef.current >= ROI_CONFIDENCE_THRESHOLD;
-            const isStable = roiStableRef.current;
-
-            if (!isStable && !hasGoodConfidence) {
-                setGuidanceMessage('Stabilisation...');
-                return; // Skip - ROI not ready
-            }
+        // Relaxed: Only skip if we have zero confidence (no text blocks at all)
+        // The parsed result quality check later will filter bad results
+        if (frameCountRef.current > 10 && roiConfidenceRef.current < 0.1) {
+            setGuidanceMessage('Stabilisation...');
+            return; // Skip - no text detected
         }
 
         // =====================================================================
@@ -324,6 +321,19 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 // Haptic feedback
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+                // Log the OCR result for debugging
+                logOCRTest(
+                    text, // Raw OCR text
+                    {
+                        street: parsed.street,
+                        postalCode: parsed.postalCode,
+                        city: parsed.city,
+                        firstName: parsed.firstName,
+                        lastName: parsed.lastName,
+                        phone: parsed.phoneNumber,
+                    }
+                ).catch(e => console.warn('[OCR-LOG] Failed:', e));
+
                 // Callback
                 onDetected(parsed);
             }
@@ -439,14 +449,50 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     });
 
     // ========================================================================
-    // FOCUS (tap to focus)
+    // TAP TO MOVE ROI + FOCUS
     // ========================================================================
-    const handleFocus = useCallback((x: number, y: number) => {
+    const handleTapToMoveROI = useCallback((x: number, y: number) => {
+        // Focus camera at tap point
         if (cameraRef.current) {
             cameraRef.current.focus({ x, y });
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
-    }, []);
+
+        // Move ROI to center on tap point with animation
+        const newRoiWidth = ROI_WIDTH;
+        const newRoiHeight = ROI_HEIGHT;
+
+        // Calculate new position (center ROI on tap point)
+        let newX = x - newRoiWidth / 2;
+        let newY = y - newRoiHeight / 2;
+
+        // Clamp to screen bounds with padding
+        const padding = 20;
+        newX = Math.max(padding, Math.min(SCREEN_WIDTH - newRoiWidth - padding, newX));
+        newY = Math.max(padding + 60, Math.min(SCREEN_HEIGHT - newRoiHeight - padding - 150, newY));
+
+        // Animate ROI to new position
+        roiX.value = withSpring(newX, ROI_SPRING_CONFIG);
+        roiY.value = withSpring(newY, ROI_SPRING_CONFIG);
+        roiWidth.value = withSpring(newRoiWidth, ROI_SPRING_CONFIG);
+        roiHeight.value = withSpring(newRoiHeight, ROI_SPRING_CONFIG);
+
+        // Reset stability for new area
+        roiStable.value = 0;
+        setRoiIsStable(false);
+        lastResultRef.current = null;
+        stabilityCountRef.current = 0;
+
+        // Haptic feedback
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        // Update guidance
+        setGuidanceMessage('Zone de scan déplacée');
+        setTimeout(() => {
+            if (scannerState === 'ready') {
+                setGuidanceMessage('Visez une étiquette...');
+            }
+        }, 1000);
+    }, [roiX, roiY, roiWidth, roiHeight, roiStable, scannerState]);
 
     // ========================================================================
     // RESET on visibility change
@@ -590,7 +636,7 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 audio={false}
                 onTouchEnd={(e) => {
                     const { locationX, locationY } = e.nativeEvent;
-                    handleFocus(locationX, locationY);
+                    handleTapToMoveROI(locationX, locationY);
                 }}
             />
 

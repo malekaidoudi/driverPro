@@ -6,8 +6,8 @@ module.exports = {
     extend: {
       colors: {
         // ============================================
-        // DESIGN SYSTEM V2 — DUAL THEME
-        // Light: Atlas Blue | Dark: Carbon Pro
+        // DESIGN SYSTEM V2 — UPS DRIVER
+        // Light: UPS Gold | Dark: UPS Brown
         // ============================================
 
         // === SEMANTIC COLORS (Theme-aware via CSS vars) ===
@@ -57,31 +57,31 @@ module.exports = {
         },
 
         // === STATIC COLORS (Always same) ===
-        // Atlas Blue (Light Mode Primary)
-        atlas: {
-          50: '#EFF6FF',
-          100: '#DBEAFE',
-          200: '#BFDBFE',
-          300: '#93C5FD',
-          400: '#60A5FA',
-          500: '#3B82F6',
-          600: '#2563EB',
-          700: '#1D4ED8',
-          800: '#1E40AF',
-          900: '#1E3A8A',
+        // UPS Gold (Primary)
+        gold: {
+          50: '#FFFBEB',
+          100: '#FEF3C7',
+          200: '#FDE68A',
+          300: '#FCD34D',
+          400: '#FBBF24',
+          500: '#FFB500',
+          600: '#E6A300',
+          700: '#CC9100',
+          800: '#B37F00',
+          900: '#996D00',
         },
-        // Carbon Cyan (Dark Mode Primary)
-        carbon: {
-          50: '#ECFEFF',
-          100: '#CFFAFE',
-          200: '#A5F3FC',
-          300: '#67E8F9',
-          400: '#22D3EE',
-          500: '#06B6D4',
-          600: '#0891B2',
-          700: '#0E7490',
-          800: '#155E75',
-          900: '#164E63',
+        // UPS Brown (Secondary)
+        brown: {
+          50: '#FDF8F0',
+          100: '#F5EDE0',
+          200: '#E8DFD0',
+          300: '#D4C4B0',
+          400: '#A08060',
+          500: '#644117',
+          600: '#4A2A1F',
+          700: '#351C15',
+          800: '#251812',
+          900: '#1A0F0A',
         },
         // Neutrals
         slate: {

@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>DriverPro</string>
+    <string>UpsDriver</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -27,14 +27,14 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>driverpro</string>
-          <string>com.driverpro.app</string>
+          <string>upsdriver</string>
+          <string>com.upsdriver.app</string>
         </array>
       </dict>
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>exp+driverpro</string>
+          <string>exp+upsdriver</string>
         </array>
       </dict>
     </array>
@@ -60,9 +60,9 @@
       <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>DriverPro needs camera access to scan addresses and labels.</string>
+    <string>UpsDriver needs camera access to scan addresses and labels.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Allow DriverPro to use your location to optimize routes.</string>
+    <string>Allow UpsDriver to use your location to optimize routes.</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your location</string>
     <key>NSLocationWhenInUseUsageDescription</key>
@@ -72,7 +72,7 @@
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your photos</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>DriverPro uses speech recognition to dictate addresses.</string>
+    <string>UpsDriver uses speech recognition to dictate addresses.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

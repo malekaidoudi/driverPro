@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "DriverPro.app"
-               BlueprintName = "DriverPro"
-               ReferencedContainer = "container:DriverPro.xcodeproj">
+               BuildableName = "UpsDriver.app"
+               BlueprintName = "UpsDriver"
+               ReferencedContainer = "container:UpsDriver.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "DriverProTests.xctest"
-               BlueprintName = "DriverProTests"
-               ReferencedContainer = "container:DriverPro.xcodeproj">
+               BuildableName = "UpsDriverTests.xctest"
+               BlueprintName = "UpsDriverTests"
+               ReferencedContainer = "container:UpsDriver.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "DriverPro.app"
-            BlueprintName = "DriverPro"
-            ReferencedContainer = "container:DriverPro.xcodeproj">
+            BuildableName = "UpsDriver.app"
+            BlueprintName = "UpsDriver"
+            ReferencedContainer = "container:UpsDriver.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "DriverPro.app"
-            BlueprintName = "DriverPro"
-            ReferencedContainer = "container:DriverPro.xcodeproj">
+            BuildableName = "UpsDriver.app"
+            BlueprintName = "UpsDriver"
+            ReferencedContainer = "container:UpsDriver.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

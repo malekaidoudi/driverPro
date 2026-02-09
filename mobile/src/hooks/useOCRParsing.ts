@@ -802,9 +802,14 @@ function extractStreet(context: ExtractionContext): Candidate<string>[] {
       // Skip tracking codes
       if (isTrackingCode(streetValue)) continue;
 
-      streetValue = streetValue.replace(/\b\d{5}\s+[a-zA-Z].*/g, '').trim();
+      // Remove postal code and everything after
+      streetValue = streetValue.replace(/\s+\d{5}\s+[a-zA-ZÀ-ÿ].*/g, '').trim();
+      // Remove leading phone numbers (10 digits starting with 0)
+      streetValue = streetValue.replace(/^0\d{9}\s+/, '').trim();
+      // Remove company names before street number (ALL CAPS words before number)
+      streetValue = streetValue.replace(/^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜÇ\s]{4,}\s+(?=\d)/g, '').trim();
 
-      if (streetValue.length > 3) {
+      if (streetValue.length > 3 && streetValue.length < 60) {
         candidates.push({
           value: streetValue,
           score: classification.score,
@@ -815,23 +820,36 @@ function extractStreet(context: ExtractionContext): Candidate<string>[] {
   }
 
   const streetPatterns = [
-    // Pattern with street number first: "2 RUE DE L'ESPERANCE"
-    /(\d{1,4}\s*(bis|ter|quater)?\s*,?\s*(rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+[^,\n]{3,40})/gi,
-    // Pattern with street number LAST: "rue de collonges 56" or "avenue jean jaures 123 bis"
-    /((rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+(de\s+)?(l['\s])?[a-zA-ZÀ-ÿ\s]{3,35}\s+\d{1,4}\s*(bis|ter|quater)?)/gi,
-    // Pattern without number: "RUE DE L'ESPERANCE"
-    /((rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+(de\s+)?(l['\s])?[a-zA-ZÀ-ÿ\s]{3,40})/gi,
-    // Pattern with "DE" variations: "RUE DEL ESPERANCE", "RUE DE L ESPERANCE"
-    /(\d{1,4}\s*(rue|avenue|boulevard|rte|route)\s+de\s*l?\s*['\s]?[a-zA-ZÀ-ÿ]{3,30})/gi,
+    // Pattern with street number first: "8 RUE DE LA PAIX" (stop before postal code)
+    /(\d{1,4}\s*(bis|ter|quater)?\s*,?\s*(rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+[a-zA-ZÀ-ÿ'\-\s]{3,35})(?=\s+\d{5}|$|\s*,)/gi,
+    // Pattern with street number LAST: "rue de collonges 56"
+    /((rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+[a-zA-ZÀ-ÿ'\-\s]{3,30}\s+\d{1,4}\s*(bis|ter|quater)?)(?=\s+\d{5}|$|\s*,)/gi,
+    // Pattern without number: "RUE DE L'ESPERANCE" (stop before postal code)
+    /((rue|avenue|boulevard|place|chemin|route|rte|allée|impasse|passage|square|cours|quai|voie|av|bd)\s+[a-zA-ZÀ-ÿ'\-\s]{3,35})(?=\s+\d{5}|$|\s*,)/gi,
   ];
+
+  // Helper to clean street value
+  const cleanStreet = (raw: string): string => {
+    let cleaned = raw.trim();
+    // Remove trailing postal code
+    cleaned = cleaned.replace(/\s+\d{5}.*$/, '');
+    // Remove leading phone numbers
+    cleaned = cleaned.replace(/^0\d{9}\s*/, '');
+    // Remove company names at start (all caps before street keyword)
+    cleaned = cleaned.replace(/^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜÇ\s]{3,}(?=\d|$)/i, (match) => {
+      if (/(rue|avenue|boulevard|chemin|route|place)/i.test(match)) return match;
+      return '';
+    });
+    return cleaned.trim();
+  };
 
   for (const pattern of streetPatterns) {
     let match;
     const regex = new RegExp(pattern.source, 'gi');
     while ((match = regex.exec(context.fullTextNoBreaks)) !== null) {
-      const street = match[1].trim();
+      const street = cleanStreet(match[1]);
       const exists = candidates.some(c => stringSimilarity(c.value.toLowerCase(), street.toLowerCase()) > 0.8);
-      if (!exists && street.length > 5) {
+      if (!exists && street.length > 5 && street.length < 60) {
         candidates.push({
           value: street,
           score: 0.5,

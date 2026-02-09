@@ -5,8 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 // ============================================
-// DESIGN SYSTEM V2
-// Light: Atlas Blue | Dark: Carbon Pro
+// DESIGN SYSTEM V2 — UPS DRIVER
+// Light: UPS Gold | Dark: UPS Brown
 // ============================================
 
 interface ThemeColors {
@@ -64,64 +64,64 @@ interface ThemeContextType {
 }
 
 // ============================================
-// ATLAS BLUE — Light Mode
-// Premium navigation app inspired
+// UPS GOLD — Light Mode
+// UPS Brand: Gold #FFB500, Brown #351C15
 // ============================================
 const lightColors: ThemeColors = {
-    // Primary - Royal Blue
-    primary: '#2563EB',
-    primaryHover: '#1D4ED8',
-    primaryMuted: 'rgba(37, 99, 235, 0.1)',
+    // Primary - UPS Gold
+    primary: '#FFB500',
+    primaryHover: '#E6A300',
+    primaryMuted: 'rgba(255, 181, 0, 0.15)',
 
     // Semantic
     success: '#16A34A',
     successMuted: 'rgba(22, 163, 74, 0.1)',
-    warning: '#D97706',
-    warningMuted: 'rgba(217, 119, 6, 0.1)',
+    warning: '#F59E0B',
+    warningMuted: 'rgba(245, 158, 11, 0.1)',
     danger: '#DC2626',
     dangerMuted: 'rgba(220, 38, 38, 0.1)',
-    info: '#0284C7',
+    info: '#644117',
 
     // Backgrounds
     bgPrimary: '#FFFFFF',
-    bgSecondary: '#F8FAFC',
-    bgTertiary: '#F1F5F9',
-    bgElevated: '#E2E8F0',
-    bgInverse: '#0F172A',
+    bgSecondary: '#FDF8F0',
+    bgTertiary: '#F5EDE0',
+    bgElevated: '#E8DFD0',
+    bgInverse: '#351C15',
 
     // Text
-    textPrimary: '#0F172A',
-    textSecondary: '#475569',
-    textTertiary: '#94A3B8',
+    textPrimary: '#351C15',
+    textSecondary: '#644117',
+    textTertiary: '#8B7355',
     textInverse: '#FFFFFF',
 
     // Borders
-    border: 'rgba(15, 23, 42, 0.08)',
-    borderMuted: 'rgba(15, 23, 42, 0.04)',
-    borderFocus: '#2563EB',
+    border: 'rgba(53, 28, 21, 0.12)',
+    borderMuted: 'rgba(53, 28, 21, 0.06)',
+    borderFocus: '#FFB500',
 
     // Map
-    mapRoute: '#2563EB',
-    mapMarker: '#16A34A',
-    mapCurrent: '#0EA5E9',
+    mapRoute: '#644117',
+    mapMarker: '#FFB500',
+    mapCurrent: '#351C15',
 
     // Shadow
-    shadowColor: 'rgba(15, 23, 42, 0.1)',
+    shadowColor: 'rgba(53, 28, 21, 0.15)',
 
     // Legacy
     surface: '#FFFFFF',
-    background: '#F8FAFC',
+    background: '#FDF8F0',
 };
 
 // ============================================
-// CARBON PRO — Dark Mode
-// Premium cockpit inspired (Tesla/Porsche)
+// UPS BROWN — Dark Mode
+// UPS Brand: Gold #FFB500, Brown #351C15
 // ============================================
 const darkColors: ThemeColors = {
-    // Primary - Electric Cyan
-    primary: '#22D3EE',
-    primaryHover: '#06B6D4',
-    primaryMuted: 'rgba(34, 211, 238, 0.15)',
+    // Primary - UPS Gold (stands out on brown)
+    primary: '#FFB500',
+    primaryHover: '#FFCA4D',
+    primaryMuted: 'rgba(255, 181, 0, 0.2)',
 
     // Semantic
     success: '#4ADE80',
@@ -130,37 +130,37 @@ const darkColors: ThemeColors = {
     warningMuted: 'rgba(251, 191, 36, 0.15)',
     danger: '#F87171',
     dangerMuted: 'rgba(248, 113, 113, 0.15)',
-    info: '#60A5FA',
+    info: '#FFD666',
 
-    // Backgrounds
-    bgPrimary: '#0D0D0F',
-    bgSecondary: '#18181B',
-    bgTertiary: '#27272A',
-    bgElevated: '#3F3F46',
-    bgInverse: '#FAFAFA',
+    // Backgrounds - UPS Brown tones
+    bgPrimary: '#1A0F0A',
+    bgSecondary: '#251812',
+    bgTertiary: '#351C15',
+    bgElevated: '#4A2A1F',
+    bgInverse: '#FDF8F0',
 
     // Text
-    textPrimary: '#FAFAFA',
-    textSecondary: '#A1A1AA',
-    textTertiary: '#71717A',
-    textInverse: '#0D0D0F',
+    textPrimary: '#FDF8F0',
+    textSecondary: '#D4C4B0',
+    textTertiary: '#A08060',
+    textInverse: '#1A0F0A',
 
     // Borders
-    border: 'rgba(255, 255, 255, 0.06)',
-    borderMuted: 'rgba(255, 255, 255, 0.03)',
-    borderFocus: '#22D3EE',
+    border: 'rgba(255, 181, 0, 0.15)',
+    borderMuted: 'rgba(255, 181, 0, 0.08)',
+    borderFocus: '#FFB500',
 
     // Map
-    mapRoute: '#22D3EE',
+    mapRoute: '#FFB500',
     mapMarker: '#4ADE80',
-    mapCurrent: '#60A5FA',
+    mapCurrent: '#FFD666',
 
     // Shadow
-    shadowColor: 'rgba(0, 0, 0, 0.5)',
+    shadowColor: 'rgba(0, 0, 0, 0.6)',
 
     // Legacy
-    surface: '#18181B',
-    background: '#0D0D0F',
+    surface: '#251812',
+    background: '#1A0F0A',
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);

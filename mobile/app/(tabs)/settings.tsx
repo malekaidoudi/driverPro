@@ -1,8 +1,9 @@
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, Share } from 'react-native';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { useRouter } from 'expo-router';
-import { CaretRight, Moon, Sun, DeviceMobile, SignOut } from 'phosphor-react-native';
+import { CaretRight, Moon, Sun, DeviceMobile, SignOut, FileText, Trash } from 'phosphor-react-native';
+import { exportOCRTestLogs, clearOCRTestLogs } from '../../src/services/ocrTestLogger';
 
 export default function SettingsScreen() {
     const { colors, theme, setTheme } = useTheme();
@@ -21,6 +22,44 @@ export default function SettingsScreen() {
                     onPress: async () => {
                         await signOut();
                         router.replace('/(auth)/login');
+                    },
+                },
+            ]
+        );
+    };
+
+    const handleExportOCRLogs = async () => {
+        try {
+            const report = await exportOCRTestLogs();
+            if (report.includes('Total tests: 0')) {
+                Alert.alert('Aucun log', 'Aucune adresse scannée enregistrée.');
+                return;
+            }
+            await Share.share({
+                message: report,
+                title: 'Logs OCR DriverPro',
+            });
+        } catch (error) {
+            Alert.alert('Erreur', 'Impossible d\'exporter les logs.');
+        }
+    };
+
+    const handleViewOCRLogs = () => {
+        router.push('/ocr-logs');
+    };
+
+    const handleClearOCRLogs = async () => {
+        Alert.alert(
+            'Supprimer les logs OCR',
+            'Êtes-vous sûr de vouloir supprimer tous les logs de scan ?',
+            [
+                { text: 'Annuler', style: 'cancel' },
+                {
+                    text: 'Supprimer',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await clearOCRTestLogs();
+                        Alert.alert('Succès', 'Logs supprimés.');
                     },
                 },
             ]
@@ -114,6 +153,22 @@ export default function SettingsScreen() {
                     title="Application de navigation"
                     value="Google Maps"
                     onPress={() => { }}
+                />
+
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginTop: 24, marginBottom: 12 }}>
+                    DONNÉES OCR
+                </Text>
+
+                <SettingItem
+                    icon={<FileText size={24} color={colors.primary} />}
+                    title="Voir les adresses scannées"
+                    onPress={handleViewOCRLogs}
+                />
+
+                <SettingItem
+                    icon={<Trash size={24} color={colors.danger} />}
+                    title="Supprimer les logs OCR"
+                    onPress={handleClearOCRLogs}
                 />
 
                 <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginTop: 24, marginBottom: 12 }}>

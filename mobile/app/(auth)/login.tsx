@@ -39,7 +39,7 @@ export default function LoginScreen() {
                     Bienvenue
                 </Text>
                 <Text style={{ fontSize: 16, color: colors.textSecondary, marginBottom: 32 }}>
-                    Connectez-vous à votre compte DriverPro
+                    Connectez-vous à votre compte UpsDriver
                 </Text>
 
                 <TextInput
@@ -86,7 +86,7 @@ export default function LoginScreen() {
                         marginBottom: 16,
                     }}
                 >
-                    <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                    <Text style={{ color: '#351C15', fontSize: 16, fontWeight: '600' }}>
                         {loading ? 'Connexion...' : 'Se connecter'}
                     </Text>
                 </TouchableOpacity>

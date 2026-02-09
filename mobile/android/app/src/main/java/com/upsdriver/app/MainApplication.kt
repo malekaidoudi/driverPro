@@ -1,4 +1,4 @@
-package com.driverpro.app
+package com.upsdriver.app
 
 import android.app.Application
 import android.content.res.Configuration

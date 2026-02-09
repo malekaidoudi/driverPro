@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '../../../src/contexts/ThemeContext';
-import { routesApi, stopsApi, servicesApi } from '../../../src/services/api';
-import { Route, Stop, StopType, StopPriority, RouteStatus } from '../../../src/types';
-import { ArrowLeft, Plus, Sparkle, Camera, Play } from 'phosphor-react-native';
+import { routesApi, stopsApi } from '../../../src/services/api';
+import { Route, Stop, StopType, StopPriority } from '../../../src/types';
+import { ArrowLeft, Plus, Sparkle, Play } from 'phosphor-react-native';
 import { AddStopBottomSheet, AddStopBottomSheetRef, StopPayload } from '../../../src/components/AddStopBottomSheet';
-import OCRScanner from '../../../src/components/OCRScannerOptimized';
-import { ParsedOCRData } from '../../../src/hooks/useOCRParsing';
 import * as Haptics from 'expo-haptics';
 
 export default function RouteDetailsScreen() {
@@ -24,10 +22,7 @@ export default function RouteDetailsScreen() {
 
     const addStopSheetRef = useRef<AddStopBottomSheetRef>(null);
 
-    const [selectedStop, setSelectedStop] = useState<Stop | null>(null);
-    const [duplicatingStop, setDuplicatingStop] = useState(false);
-    const [deletingStop, setDeletingStop] = useState(false);
-    const [rapidScanVisible, setRapidScanVisible] = useState(false);
+    const [editingStop, setEditingStop] = useState<Stop | null>(null);
 
     const load = useCallback(async () => {
         if (!routeId) return;
@@ -79,113 +74,93 @@ export default function RouteDetailsScreen() {
     };
 
     const handleDuplicateStop = async () => {
-        if (!routeId) return;
-        if (!selectedStop) return;
+        if (!routeId || !editingStop) return;
 
-        setDuplicatingStop(true);
         try {
             await stopsApi.create(routeId, {
-                address: selectedStop.address,
-                latitude: selectedStop.latitude,
-                longitude: selectedStop.longitude,
-                notes: undefined,
-                type: StopType.DELIVERY,
-                estimated_duration_seconds: 180,
-                package_count: 1,
+                address: editingStop.address,
+                latitude: editingStop.latitude,
+                longitude: editingStop.longitude,
+                notes: editingStop.notes || undefined,
+                type: editingStop.type || StopType.DELIVERY,
+                estimated_duration_seconds: editingStop.estimated_duration_seconds || 180,
+                package_count: editingStop.package_count || 1,
+                first_name: editingStop.first_name || undefined,
+                last_name: editingStop.last_name || undefined,
+                phone_number: editingStop.phone_number || undefined,
             } as any);
 
-            setSelectedStop(null);
+            addStopSheetRef.current?.close();
+            setEditingStop(null);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             await load();
         } catch (error: any) {
             Alert.alert('Erreur', error?.message ?? "Impossible de dupliquer l'arrêt");
-        } finally {
-            setDuplicatingStop(false);
         }
     };
 
     const handleDeleteStop = async () => {
-        if (!routeId) return;
-        if (!selectedStop) return;
+        if (!routeId || !editingStop) return;
 
-        Alert.alert('Supprimer', 'Supprimer cet arrêt ?', [
-            { text: 'Annuler', style: 'cancel' },
-            {
-                text: 'Supprimer',
-                style: 'destructive',
-                onPress: async () => {
-                    setDeletingStop(true);
-                    try {
-                        await stopsApi.delete(routeId, selectedStop.id);
-                        setSelectedStop(null);
-                        await load();
-                    } catch (error: any) {
-                        Alert.alert('Erreur', error?.message ?? "Impossible de supprimer l'arrêt");
-                    } finally {
-                        setDeletingStop(false);
-                    }
-                },
-            },
-        ]);
+        try {
+            await stopsApi.delete(routeId, editingStop.id);
+            addStopSheetRef.current?.close();
+            setEditingStop(null);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await load();
+        } catch (error: any) {
+            Alert.alert('Erreur', error?.message ?? "Impossible de supprimer l'arrêt");
+        }
     };
 
     const stops: Stop[] = route?.stops ?? [];
 
     const openAddStop = () => {
+        setEditingStop(null);
         addStopSheetRef.current?.present();
     };
 
-    const openRapidScan = () => {
-        setRapidScanVisible(true);
+    const openEditStop = (stop: Stop) => {
+        setEditingStop(stop);
+        addStopSheetRef.current?.present();
     };
 
-    // Handler for rapid scan mode - auto-add stops from OCR
-    const handleRapidAdd = async (parsed: ParsedOCRData): Promise<void> => {
-        if (!routeId) return;
+    const handleUpdateStop = async (payload: StopPayload) => {
+        if (!routeId || !editingStop) return;
 
-        // Build full address from parsed data
-        const addressParts = [parsed.street, parsed.postalCode, parsed.city].filter(Boolean);
-        const fullAddress = addressParts.join(', ') || 'Adresse scannée';
+        const estimatedDurationSeconds = Math.max(0, Math.round(payload.durationMinutes * 60));
+        const packageCount = Math.max(0, Math.round(payload.packageCount));
 
-        // Geocode the address to get coordinates
-        let latitude = 0;
-        let longitude = 0;
-
-        try {
-            const predictions = await servicesApi.autocomplete(fullAddress);
-            if (predictions.length > 0) {
-                const details = await servicesApi.getPlaceDetails(predictions[0].place_id);
-                latitude = details.latitude;
-                longitude = details.longitude;
-            }
-        } catch (e) {
-            console.warn('[RapidScan] Geocoding failed, using 0,0');
-        }
-
-        // Create the stop
-        await stopsApi.create(routeId, {
-            address: fullAddress,
-            latitude,
-            longitude,
-            type: StopType.DELIVERY,
-            priority: StopPriority.NORMAL,
-            first_name: parsed.firstName || undefined,
-            last_name: parsed.lastName || undefined,
-            phone_number: parsed.phoneNumber || undefined,
-            notes: parsed.companyName ? `Société: ${parsed.companyName}` : undefined,
+        await stopsApi.update(routeId, editingStop.id, {
+            address: payload.address,
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+            notes: payload.notes || undefined,
+            type: payload.type,
+            priority: payload.priority,
+            estimated_duration_seconds: estimatedDurationSeconds,
+            package_count: packageCount,
+            first_name: payload.firstName || undefined,
+            last_name: payload.lastName || undefined,
+            phone_number: payload.phoneNumber || undefined,
+            time_window_start: payload.timeWindowStart || undefined,
+            time_window_end: payload.timeWindowEnd || undefined,
         } as any);
 
-        // Reload route data
-        load();
+        addStopSheetRef.current?.close();
+        setEditingStop(null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await load();
     };
 
-    const handleAddStopSubmit = async (payload: StopPayload) => {
+    const handleAddStopSubmit = async (payload: StopPayload): Promise<string | void> => {
         if (!routeId) return;
 
         const estimatedDurationSeconds = Math.max(0, Math.round(payload.durationMinutes * 60));
         const packageCount = Math.max(0, Math.round(payload.packageCount));
         const sequenceOrder = payload.order === 'first' ? 0 : payload.order === 'last' ? 9999 : undefined;
 
-        await stopsApi.create(routeId, {
+        const newStop = await stopsApi.create(routeId, {
             address: payload.address,
             latitude: payload.latitude,
             longitude: payload.longitude,
@@ -202,9 +177,49 @@ export default function RouteDetailsScreen() {
             time_window_end: payload.timeWindowEnd || undefined,
         } as any);
 
+        // In auto-add mode, don't close sheet - return the stop ID
+        if (newStop?.id) {
+            await load();
+            return newStop.id;
+        }
+
         addStopSheetRef.current?.close();
         await load();
     };
+
+    // Update stop by ID (for auto-add mode)
+    const handleUpdateStopById = async (stopId: string, payload: StopPayload) => {
+        if (!routeId) return;
+
+        const estimatedDurationSeconds = Math.max(0, Math.round(payload.durationMinutes * 60));
+        const packageCount = Math.max(0, Math.round(payload.packageCount));
+
+        await stopsApi.update(routeId, stopId, {
+            address: payload.address,
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+            notes: payload.notes || undefined,
+            type: payload.type,
+            priority: payload.priority,
+            estimated_duration_seconds: estimatedDurationSeconds,
+            package_count: packageCount,
+            first_name: payload.firstName || undefined,
+            last_name: payload.lastName || undefined,
+            phone_number: payload.phoneNumber || undefined,
+            time_window_start: payload.timeWindowStart || undefined,
+            time_window_end: payload.timeWindowEnd || undefined,
+        } as any);
+
+        await load();
+    };
+
+    // Reopen scanner after dismissing the sheet
+    const handleDismissAfterScan = useCallback(() => {
+        // Small delay to let the sheet close, then reopen with scanner
+        setTimeout(() => {
+            addStopSheetRef.current?.presentWithScanner();
+        }, 300);
+    }, []);
 
     if (loading) {
         return (
@@ -328,24 +343,10 @@ export default function RouteDetailsScreen() {
                             opacity: (optimizing || route.status === 'in_progress' || route.status === 'completed') ? 0.5 : 1,
                         }}
                     >
-                        <Sparkle size={18} color="#FFFFFF" weight="fill" />
-                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', marginLeft: 8 }}>
+                        <Sparkle size={18} color="#351C15" weight="fill" />
+                        <Text style={{ color: '#351C15', fontSize: 14, fontWeight: '700', marginLeft: 8 }}>
                             {optimizing ? 'Optimisation...' : 'Optimiser'}
                         </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        onPress={openRapidScan}
-                        style={{
-                            width: 52,
-                            height: 52,
-                            borderRadius: 12,
-                            backgroundColor: '#FF6B00',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}
-                    >
-                        <Camera size={22} color="#FFFFFF" weight="bold" />
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -380,7 +381,7 @@ export default function RouteDetailsScreen() {
                         .map((stop, index) => (
                             <TouchableOpacity
                                 key={stop.id}
-                                onPress={() => setSelectedStop(stop)}
+                                onPress={() => openEditStop(stop)}
                                 style={{
                                     backgroundColor: colors.surface,
                                     padding: 16,
@@ -402,80 +403,33 @@ export default function RouteDetailsScreen() {
                             </TouchableOpacity>
                         ))
                 )}
-
-                {selectedStop && (
-                    <View style={{ backgroundColor: colors.surface, padding: 16, borderRadius: 12, marginTop: 12 }}>
-                        <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 12 }}>
-                            Actions sur l'arrêt
-                        </Text>
-                        <Text style={{ fontSize: 14, color: colors.textSecondary, marginBottom: 12 }}>
-                            {selectedStop.address}
-                        </Text>
-
-                        <TouchableOpacity
-                            onPress={handleDuplicateStop}
-                            disabled={duplicatingStop}
-                            style={{
-                                backgroundColor: colors.background,
-                                padding: 14,
-                                borderRadius: 12,
-                                marginBottom: 12,
-                                opacity: duplicatingStop ? 0.8 : 1,
-                            }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>
-                                {duplicatingStop ? 'Duplication...' : "Dupliquer l'arrêt"}
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={handleDeleteStop}
-                            disabled={deletingStop}
-                            style={{
-                                backgroundColor: '#DC2626',
-                                padding: 14,
-                                borderRadius: 12,
-                                opacity: deletingStop ? 0.8 : 1,
-                            }}
-                        >
-                            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Supprimer l'arrêt</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={() => setSelectedStop(null)}
-                            style={{
-                                backgroundColor: colors.background,
-                                padding: 14,
-                                borderRadius: 12,
-                                marginTop: 12,
-                            }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '700' }}>Fermer</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
             </ScrollView>
 
             <AddStopBottomSheet
                 ref={addStopSheetRef}
-                onPressAdd={handleAddStopSubmit}
+                title={editingStop ? 'Modifier l\'arrêt' : 'Ajouter un stop'}
+                initialAddress={editingStop?.address || ''}
+                initialLatitude={editingStop?.latitude || 0}
+                initialLongitude={editingStop?.longitude || 0}
+                initialNotes={editingStop?.notes || ''}
+                initialPackageCount={editingStop?.package_count || 1}
+                initialDurationMinutes={editingStop ? Math.round(editingStop.estimated_duration_seconds / 60) : 3}
+                initialType={editingStop?.type || StopType.DELIVERY}
+                initialPriority={editingStop?.priority || StopPriority.NORMAL}
+                initialFirstName={editingStop?.first_name || ''}
+                initialLastName={editingStop?.last_name || ''}
+                initialPhoneNumber={editingStop?.phone_number || ''}
+                initialTimeWindowStart={editingStop?.time_window_start || ''}
+                initialTimeWindowEnd={editingStop?.time_window_end || ''}
+                showActions={!!editingStop}
+                autoAddOnScan={!editingStop}
+                existingStops={stops.map(s => ({ address: s.address, latitude: s.latitude, longitude: s.longitude, order: undefined }))}
+                onPressAdd={editingStop ? handleUpdateStop : handleAddStopSubmit}
+                onUpdateStop={handleUpdateStopById}
+                onPressDuplicateStop={handleDuplicateStop}
+                onPressDeleteStop={handleDeleteStop}
+                onDismissAfterScan={handleDismissAfterScan}
             />
-
-            {/* Rapid Scan Modal */}
-            <Modal
-                visible={rapidScanVisible}
-                animationType="slide"
-                presentationStyle="fullScreen"
-                onRequestClose={() => setRapidScanVisible(false)}
-            >
-                <OCRScanner
-                    isVisible={rapidScanVisible}
-                    rapidMode={true}
-                    onRapidAdd={handleRapidAdd}
-                    onDetected={() => { }}
-                    onClose={() => setRapidScanVisible(false)}
-                />
-            </Modal>
         </View>
     );
 }

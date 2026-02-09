@@ -257,105 +257,118 @@ PODS:
   - FBLazyVector (0.81.5)
   - Google-Maps-iOS-Utils (5.0.0):
     - GoogleMaps (~> 8.0)
-  - GoogleDataTransport (10.1.0):
-    - nanopb (~> 3.30910.0)
-    - PromisesObjC (~> 2.4)
+  - GoogleDataTransport (9.4.1):
+    - GoogleUtilities/Environment (~> 7.7)
+    - nanopb (< 2.30911.0, >= 2.30908.0)
+    - PromisesObjC (< 3.0, >= 1.2)
   - GoogleMaps (8.4.0):
     - GoogleMaps/Maps (= 8.4.0)
   - GoogleMaps/Base (8.4.0)
   - GoogleMaps/Maps (8.4.0):
     - GoogleMaps/Base
-  - GoogleMLKit/MLKitCore (9.0.0):
-    - MLKitCommon (~> 14.0.0)
-  - GoogleMLKit/TextRecognition (9.0.0):
+  - GoogleMLKit/MLKitCore (5.0.0):
+    - MLKitCommon (~> 10.0.0)
+  - GoogleMLKit/TextRecognition (5.0.0):
     - GoogleMLKit/MLKitCore
-    - MLKitTextRecognition (~> 7.0.0)
-  - GoogleMLKit/TextRecognitionChinese (9.0.0):
+    - MLKitTextRecognition (~> 3.0.0)
+  - GoogleMLKit/TextRecognitionChinese (5.0.0):
     - GoogleMLKit/MLKitCore
-    - MLKitTextRecognitionChinese (~> 6.0.0)
-  - GoogleMLKit/TextRecognitionDevanagari (9.0.0):
+    - MLKitTextRecognitionChinese (~> 2.0.0)
+  - GoogleMLKit/TextRecognitionDevanagari (5.0.0):
     - GoogleMLKit/MLKitCore
-    - MLKitTextRecognitionDevanagari (~> 6.0.0)
-  - GoogleMLKit/TextRecognitionJapanese (9.0.0):
+    - MLKitTextRecognitionDevanagari (~> 2.0.0)
+  - GoogleMLKit/TextRecognitionJapanese (5.0.0):
     - GoogleMLKit/MLKitCore
-    - MLKitTextRecognitionJapanese (~> 6.0.0)
-  - GoogleMLKit/TextRecognitionKorean (9.0.0):
+    - MLKitTextRecognitionJapanese (~> 2.0.0)
+  - GoogleMLKit/TextRecognitionKorean (5.0.0):
     - GoogleMLKit/MLKitCore
-    - MLKitTextRecognitionKorean (~> 6.0.0)
-  - GoogleMLKit/Translate (9.0.0):
+    - MLKitTextRecognitionKorean (~> 2.0.0)
+  - GoogleMLKit/Translate (5.0.0):
     - GoogleMLKit/MLKitCore
-    - MLKitTranslate (~> 8.0.0)
-  - GoogleToolboxForMac/Defines (4.2.1)
-  - GoogleToolboxForMac/Logger (4.2.1):
-    - GoogleToolboxForMac/Defines (= 4.2.1)
-  - "GoogleToolboxForMac/NSData+zlib (4.2.1)":
-    - GoogleToolboxForMac/Defines (= 4.2.1)
-  - GoogleToolboxForMac/StringEncoding (4.2.1):
-    - GoogleToolboxForMac/Defines (= 4.2.1)
-  - GoogleUtilities/Environment (8.1.0):
+    - MLKitTranslate (~> 4.0.0)
+  - GoogleToolboxForMac/DebugUtils (2.3.2):
+    - GoogleToolboxForMac/Defines (= 2.3.2)
+  - GoogleToolboxForMac/Defines (2.3.2)
+  - GoogleToolboxForMac/Logger (2.3.2):
+    - GoogleToolboxForMac/Defines (= 2.3.2)
+  - "GoogleToolboxForMac/NSData+zlib (2.3.2)":
+    - GoogleToolboxForMac/Defines (= 2.3.2)
+  - "GoogleToolboxForMac/NSDictionary+URLArguments (2.3.2)":
+    - GoogleToolboxForMac/DebugUtils (= 2.3.2)
+    - GoogleToolboxForMac/Defines (= 2.3.2)
+    - "GoogleToolboxForMac/NSString+URLArguments (= 2.3.2)"
+  - "GoogleToolboxForMac/NSString+URLArguments (2.3.2)"
+  - GoogleToolboxForMac/StringEncoding (2.3.2):
+    - GoogleToolboxForMac/Defines (= 2.3.2)
+  - GoogleUtilities/Environment (7.13.3):
     - GoogleUtilities/Privacy
-  - GoogleUtilities/Logger (8.1.0):
+    - PromisesObjC (< 3.0, >= 1.2)
+  - GoogleUtilities/Logger (7.13.3):
     - GoogleUtilities/Environment
     - GoogleUtilities/Privacy
-  - GoogleUtilities/Privacy (8.1.0)
-  - GoogleUtilities/UserDefaults (8.1.0):
+  - GoogleUtilities/Privacy (7.13.3)
+  - GoogleUtilities/UserDefaults (7.13.3):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
+  - GoogleUtilitiesComponents (1.1.0):
+    - GoogleUtilities/Logger
   - GTMSessionFetcher/Core (3.5.0)
   - hermes-engine (0.81.5):
     - hermes-engine/Pre-built (= 0.81.5)
   - hermes-engine/Pre-built (0.81.5)
-  - MLImage (1.0.0-beta8)
-  - MLKitCommon (14.0.0):
-    - GoogleDataTransport (~> 10.0)
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GoogleUtilities/Logger (~> 8.0)
-    - GoogleUtilities/UserDefaults (~> 8.0)
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-  - MLKitNaturalLanguage (10.0.0):
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GoogleToolboxForMac/StringEncoding (< 5.0, >= 4.2.1)
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-    - MLKitCommon (~> 14.0)
-  - MLKitTextRecognition (7.0.0):
-    - MLKitCommon (~> 14.0)
-    - MLKitTextRecognitionCommon (= 6.0.0)
-    - MLKitVision (~> 10.0)
-  - MLKitTextRecognitionChinese (6.0.0):
-    - MLKitCommon (~> 14.0)
-    - MLKitTextRecognitionCommon (= 6.0.0)
-    - MLKitVision (~> 10.0)
-  - MLKitTextRecognitionCommon (6.0.0):
-    - MLKitCommon (~> 14.0)
-    - MLKitVision (~> 10.0)
-  - MLKitTextRecognitionDevanagari (6.0.0):
-    - MLKitCommon (~> 14.0)
-    - MLKitTextRecognitionCommon (= 6.0.0)
-    - MLKitVision (~> 10.0)
-  - MLKitTextRecognitionJapanese (6.0.0):
-    - MLKitCommon (~> 14.0)
-    - MLKitTextRecognitionCommon (= 6.0.0)
-    - MLKitVision (~> 10.0)
-  - MLKitTextRecognitionKorean (6.0.0):
-    - MLKitCommon (~> 14.0)
-    - MLKitTextRecognitionCommon (= 6.0.0)
-    - MLKitVision (~> 10.0)
-  - MLKitTranslate (8.0.0):
-    - MLKitNaturalLanguage (~> 10.0)
-    - SSZipArchive (< 3.0, >= 2.5.5)
-  - MLKitVision (10.0.0):
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-    - MLImage (= 1.0.0-beta8)
-    - MLKitCommon (~> 14.0)
-  - nanopb (3.30910.0):
-    - nanopb/decode (= 3.30910.0)
-    - nanopb/encode (= 3.30910.0)
-  - nanopb/decode (3.30910.0)
-  - nanopb/encode (3.30910.0)
+  - MLImage (1.0.0-beta5)
+  - MLKitCommon (10.0.0):
+    - GoogleDataTransport (~> 9.0)
+    - GoogleToolboxForMac/Logger (~> 2.1)
+    - "GoogleToolboxForMac/NSData+zlib (~> 2.1)"
+    - "GoogleToolboxForMac/NSDictionary+URLArguments (~> 2.1)"
+    - GoogleUtilities/UserDefaults (~> 7.0)
+    - GoogleUtilitiesComponents (~> 1.0)
+    - GTMSessionFetcher/Core (< 4.0, >= 1.1)
+  - MLKitNaturalLanguage (6.0.0):
+    - GoogleToolboxForMac/Logger (~> 2.1)
+    - "GoogleToolboxForMac/NSData+zlib (~> 2.1)"
+    - "GoogleToolboxForMac/NSDictionary+URLArguments (~> 2.1)"
+    - GoogleToolboxForMac/StringEncoding (~> 2.1)
+    - GTMSessionFetcher/Core (< 4.0, >= 1.1)
+    - MLKitCommon (~> 10.0)
+  - MLKitTextRecognition (3.0.0):
+    - MLKitCommon (~> 10.0)
+    - MLKitTextRecognitionCommon (= 2.0.0)
+    - MLKitVision (~> 6.0)
+  - MLKitTextRecognitionChinese (2.0.0):
+    - MLKitCommon (~> 10.0)
+    - MLKitTextRecognitionCommon (= 2.0.0)
+    - MLKitVision (~> 6.0)
+  - MLKitTextRecognitionCommon (2.0.0):
+    - MLKitCommon (~> 10.0)
+    - MLKitVision (~> 6.0)
+  - MLKitTextRecognitionDevanagari (2.0.0):
+    - MLKitCommon (~> 10.0)
+    - MLKitTextRecognitionCommon (= 2.0.0)
+    - MLKitVision (~> 6.0)
+  - MLKitTextRecognitionJapanese (2.0.0):
+    - MLKitCommon (~> 10.0)
+    - MLKitTextRecognitionCommon (= 2.0.0)
+    - MLKitVision (~> 6.0)
+  - MLKitTextRecognitionKorean (2.0.0):
+    - MLKitCommon (~> 10.0)
+    - MLKitTextRecognitionCommon (= 2.0.0)
+    - MLKitVision (~> 6.0)
+  - MLKitTranslate (4.0.0):
+    - MLKitNaturalLanguage (~> 6.0)
+    - SSZipArchive (< 3.0, >= 2.2.3)
+  - MLKitVision (6.0.0):
+    - GoogleToolboxForMac/Logger (~> 2.1)
+    - "GoogleToolboxForMac/NSData+zlib (~> 2.1)"
+    - GTMSessionFetcher/Core (< 4.0, >= 1.1)
+    - MLImage (= 1.0.0-beta5)
+    - MLKitCommon (~> 10.0)
+  - nanopb (2.30910.0):
+    - nanopb/decode (= 2.30910.0)
+    - nanopb/encode (= 2.30910.0)
+  - nanopb/decode (2.30910.0)
+  - nanopb/encode (2.30910.0)
   - PromisesObjC (2.4.0)
   - RCTDeprecation (0.81.5)
   - RCTRequired (0.81.5)
@@ -2364,7 +2377,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - SSZipArchive (2.6.0)
+  - SSZipArchive (2.4.3)
   - VisionCamera (4.7.3):
     - VisionCamera/Core (= 4.7.3)
     - VisionCamera/FrameProcessors (= 4.7.3)
@@ -2501,6 +2514,7 @@ SPEC REPOS:
     - GoogleMLKit
     - GoogleToolboxForMac
     - GoogleUtilities
+    - GoogleUtilitiesComponents
     - GTMSessionFetcher
     - MLImage
     - MLKitCommon
@@ -2750,25 +2764,26 @@ SPEC CHECKSUMS:
   EXUpdatesInterface: 5adf50cb41e079c861da6d9b4b954c3db9a50734
   FBLazyVector: e95a291ad2dadb88e42b06e0c5fb8262de53ec12
   Google-Maps-iOS-Utils: 66d6de12be1ce6d3742a54661e7a79cb317a9321
-  GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
+  GoogleDataTransport: 6c09b596d841063d76d4288cc2d2f42cc36e1e2a
   GoogleMaps: 8939898920281c649150e0af74aa291c60f2e77d
-  GoogleMLKit: b1eee21a41c57704fe72483b15c85cb2c0cd7444
-  GoogleToolboxForMac: d1a2cbf009c453f4d6ded37c105e2f67a32206d8
-  GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
+  GoogleMLKit: 90ba06e028795a50261f29500d238d6061538711
+  GoogleToolboxForMac: 8bef7c7c5cf7291c687cf5354f39f9db6399ad34
+  GoogleUtilities: ea963c370a38a8069cc5f7ba4ca849a60b6d7d15
+  GoogleUtilitiesComponents: 679b2c881db3b615a2777504623df6122dd20afe
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   hermes-engine: 9f4dfe93326146a1c99eb535b1cb0b857a3cd172
-  MLImage: 0de5c6c2bf9e93b80ef752e2797f0836f03b58c0
-  MLKitCommon: 47d47b50a031d00db62f1b0efe5a1d8b09a3b2e6
-  MLKitNaturalLanguage: 498154f2461f97abb00eb161eb773670ffc46250
-  MLKitTextRecognition: c0ad24510481dfc8893ad15dfcb8a5f05ed9e826
-  MLKitTextRecognitionChinese: b69210723ed8cc9bc7b2e7847001880b0dcbb7f8
-  MLKitTextRecognitionCommon: 234ceb1cfdfb5fceb4fd664943046609a2961cc2
-  MLKitTextRecognitionDevanagari: 326281ad520172466dd6dd6a784fa03fb8ab9e37
-  MLKitTextRecognitionJapanese: 965f89fd8ad3a02eb466106522ed08ea19f30f61
-  MLKitTextRecognitionKorean: 22c8d6a73f519fa9732873993a30b067f8deccb1
-  MLKitTranslate: fcb283a2cbaaa595e1cf1d3fedffcea2e97a1168
-  MLKitVision: 39a5a812db83c4a0794445088e567f3631c11961
-  nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
+  MLImage: 1824212150da33ef225fbd3dc49f184cf611046c
+  MLKitCommon: afcd11b6c0735066a0dde8b4bf2331f6197cbca2
+  MLKitNaturalLanguage: b9a77b1811edf35bfba52ec1ce2c25a463aa45e0
+  MLKitTextRecognition: 91706574e4db9b48cd2e66cbbcc6b58956156b0a
+  MLKitTextRecognitionChinese: 19d3a70799f17cf2115b6381964b87e874d96dcd
+  MLKitTextRecognitionCommon: 3bd8375160d21dc9f9cc512d1fab2530ecc43dde
+  MLKitTextRecognitionDevanagari: 9c689b259f6654fdaa1004a769dcec55b257a02a
+  MLKitTextRecognitionJapanese: 9afa94ad6d622a69c2043def562fffa9be8d269d
+  MLKitTextRecognitionKorean: 4b37d1a034af61bf9699d791ae8bcf04cb1e97b7
+  MLKitTranslate: 52e52e7c4800e853c274711c9034306b80abba88
+  MLKitVision: 90922bca854014a856f8b649d1f1f04f63fd9c79
+  nanopb: 438bc412db1928dac798aa6fd75726007be04262
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   RCTDeprecation: 943572d4be82d480a48f4884f670135ae30bf990
   RCTRequired: 8f3cfc90cc25cf6e420ddb3e7caaaabc57df6043
@@ -2844,11 +2859,11 @@ SPEC CHECKSUMS:
   RNScreens: d8d6f1792f6e7ac12b0190d33d8d390efc0c1845
   RNSVG: 31d6639663c249b7d5abc9728dde2041eb2a3c34
   RNWorklets: 2fb11aebe21ea76d0c5456e92d2f23e0cad91a68
-  SSZipArchive: 8a6ee5677c8e304bebc109e39cf0da91ccef22ea
+  SSZipArchive: fe6a26b2a54d5a0890f2567b5cc6de5caa600aef
   VisionCamera: 0044a94f7489f19e19d5938e97dfc36f4784af3c
   VisionCameraTextRecognition: d183547eed78b904622eac9e6860d0690a0c3f0c
   Yoga: 5934998fbeaef7845dbf698f698518695ab4cd1a
 
-PODFILE CHECKSUM: 0894b61cad85ff514edc78b493201372fa1c261a
+PODFILE CHECKSUM: d47db6650d3b83f2944440f8a45847eec1db6db2
 
 COCOAPODS: 1.16.2

@@ -41,7 +41,7 @@ export default function SignupScreen() {
                     Créer un compte
                 </Text>
                 <Text style={{ fontSize: 16, color: colors.textSecondary, marginBottom: 32 }}>
-                    Rejoignez DriverPro pour optimiser vos tournées
+                    Rejoignez UpsDriver pour optimiser vos tournées
                 </Text>
 
                 <TextInput
@@ -103,7 +103,7 @@ export default function SignupScreen() {
                         marginBottom: 16,
                     }}
                 >
-                    <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                    <Text style={{ color: '#351C15', fontSize: 16, fontWeight: '600' }}>
                         {loading ? 'Création...' : 'S\'inscrire'}
                     </Text>
                 </TouchableOpacity>

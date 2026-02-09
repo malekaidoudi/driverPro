@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.driverpro.app'
+    namespace 'com.upsdriver.app'
     defaultConfig {
-        applicationId 'com.driverpro.app'
+        applicationId 'com.upsdriver.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -4,11 +4,20 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { routesApi } from '../src/services/api';
 
+const getDefaultRouteName = (): string => {
+    const days = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+    const now = new Date();
+    const dayName = days[now.getDay()];
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${dayName} ${day}/${month}`;
+};
+
 export default function CreateRouteScreen() {
     const { colors } = useTheme();
     const router = useRouter();
 
-    const [name, setName] = useState('');
+    const [name, setName] = useState(getDefaultRouteName());
     const [routeDate, setRouteDate] = useState(new Date().toISOString().slice(0, 10));
     const [startAddress, setStartAddress] = useState('');
     const [endAddress, setEndAddress] = useState('');
@@ -143,7 +152,7 @@ export default function CreateRouteScreen() {
                         opacity: loading ? 0.8 : 1,
                     }}
                 >
-                    <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                    <Text style={{ color: '#351C15', fontSize: 16, fontWeight: '600' }}>
                         {loading ? 'Création...' : 'Créer la tournée'}
                     </Text>
                 </TouchableOpacity>
