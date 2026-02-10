@@ -348,11 +348,99 @@ function normalizeText(text: string): string {
 }
 
 // =============================================================================
+// SHIP TO DETECTION - Extract recipient address only
+// =============================================================================
+
+const SHIP_TO_MARKERS = [
+  'ship to', 'ship to:', 'shipto', 'shipto:',
+  'deliver to', 'deliver to:', 'deliverto',
+  'consignee', 'consignee:', 'destinataire', 'destinataire:',
+  'livrer à', 'livrer a', 'livrer a:', 'livrer à:',
+  'recipient', 'recipient:', 'dest:', 'dest',
+  'à:', 'a:', // Common on French labels
+];
+
+const SHIP_FROM_MARKERS = [
+  'ship from', 'ship from:', 'shipfrom',
+  'sender', 'sender:', 'from:', 'from',
+  'expediteur', 'expéditeur', 'expediteur:', 'expéditeur:',
+  'shipper', 'shipper:', 'origin', 'origin:',
+  'return to', 'return address', 'retour',
+];
+
+function extractRecipientSection(text: string): string {
+  const lowerText = text.toLowerCase();
+
+  // Find "Ship To" marker position
+  let shipToIndex = -1;
+  let shipToMarkerLength = 0;
+
+  for (const marker of SHIP_TO_MARKERS) {
+    const idx = lowerText.indexOf(marker);
+    if (idx !== -1 && (shipToIndex === -1 || idx < shipToIndex)) {
+      shipToIndex = idx;
+      shipToMarkerLength = marker.length;
+    }
+  }
+
+  // If we found "Ship To", extract text after it
+  if (shipToIndex !== -1) {
+    let recipientText = text.substring(shipToIndex + shipToMarkerLength);
+
+    // Find if there's a "Ship From" or similar marker AFTER "Ship To" to cut off
+    const lowerRecipient = recipientText.toLowerCase();
+    let cutoffIndex = recipientText.length;
+
+    for (const marker of SHIP_FROM_MARKERS) {
+      const idx = lowerRecipient.indexOf(marker);
+      if (idx !== -1 && idx > 20 && idx < cutoffIndex) { // At least 20 chars of content
+        cutoffIndex = idx;
+      }
+    }
+
+    if (cutoffIndex < recipientText.length) {
+      recipientText = recipientText.substring(0, cutoffIndex);
+    }
+
+    return recipientText.trim();
+  }
+
+  // No "Ship To" found - check if there's "Ship From" to exclude
+  let shipFromIndex = -1;
+  let shipFromEndIndex = -1;
+
+  for (const marker of SHIP_FROM_MARKERS) {
+    const idx = lowerText.indexOf(marker);
+    if (idx !== -1) {
+      if (shipFromIndex === -1 || idx < shipFromIndex) {
+        shipFromIndex = idx;
+      }
+    }
+  }
+
+  // If "Ship From" is at the beginning, try to find where recipient starts
+  if (shipFromIndex !== -1 && shipFromIndex < 50) {
+    // Look for a double newline or significant gap that might separate sections
+    const afterFrom = text.substring(shipFromIndex);
+    const sectionBreak = afterFrom.search(/\n\s*\n/);
+    if (sectionBreak !== -1 && sectionBreak < 300) {
+      return text.substring(shipFromIndex + sectionBreak).trim();
+    }
+  }
+
+  // Return original text if no markers found
+  return text;
+}
+
+// =============================================================================
 // TOKENIZATION
 // =============================================================================
 
 function tokenize(text: string): { lines: string[]; fullText: string } {
-  const normalized = normalizeText(text);
+  // First, try to extract only the recipient section
+  const recipientText = extractRecipientSection(text);
+
+  const normalized = normalizeText(recipientText);
   const lines = normalized
     .split(/\n+/)
     .map(line => line.trim())

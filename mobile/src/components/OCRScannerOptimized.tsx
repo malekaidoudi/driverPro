@@ -120,6 +120,7 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const [scannerState, setScannerState] = useState<ScannerState>('ready');
     const [zoom, setZoom] = useState(1.0);
     const [torch, setTorch] = useState<'off' | 'on'>('off');
+    const [exposure, setExposure] = useState(0); // -1 to 1, 0 = auto
     const [guidanceMessage, setGuidanceMessage] = useState('Visez une étiquette...');
     const [debugText, setDebugText] = useState<string>(''); // DEBUG: raw OCR text
     const [debugParsed, setDebugParsed] = useState<string>(''); // DEBUG: parsed result
@@ -148,6 +149,10 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const roiConfidenceRef = useRef(0);
     const roiStableRef = useRef(false);
     const lastOCRTextRef = useRef<string>(''); // For memoization
+
+    // Auto-exposure for faded labels
+    const lowQualityFrameCount = useRef(0);
+    const exposureBoostApplied = useRef(false);
 
     // Dynamic ROI Tracker
     const { updateROI, reset: resetROI } = useROITracker();
@@ -255,8 +260,21 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
         if (parsed.confidence < PARSE_CONFIDENCE_THRESHOLD) {
             setGuidanceMessage(`Confiance faible (${Math.round(parsed.confidence * 100)}%)`);
             setScannerState('ready');
+
+            // AUTO-EXPOSURE: Detect faded labels and boost exposure
+            lowQualityFrameCount.current++;
+            if (lowQualityFrameCount.current >= 8 && !exposureBoostApplied.current) {
+                // Many low quality frames - likely a faded label, boost exposure
+                exposureBoostApplied.current = true;
+                setExposure(0.5); // Increase brightness
+                setGuidanceMessage('📸 Contraste augmenté...');
+            }
+
             return; // Skip - parsing confidence too low
         }
+
+        // Reset low quality counter on good result
+        lowQualityFrameCount.current = 0;
 
         // DEBUG: Show parsed result on screen
         setDebugParsed(
@@ -511,6 +529,10 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             lastOCRTextRef.current = '';
             parsingInProgress = false;
             cancelAllJobs(); // Cancel any pending parse jobs
+            // Reset auto-exposure
+            lowQualityFrameCount.current = 0;
+            exposureBoostApplied.current = false;
+            setExposure(0); // Reset to auto
 
             setScannerState('ready');
             setGuidanceMessage(rapidMode ? 'Mode rafale - Scannez les colis' : 'Visez une étiquette...');
@@ -623,9 +645,10 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 style={StyleSheet.absoluteFill}
                 device={device}
                 format={format}
-                isActive={isVisible && (!isValidatedRef.current || rapidMode)}
+                isActive={isVisible}
                 zoom={zoom}
                 torch={torch}
+                exposure={exposure}
                 enableZoomGesture
                 fps={TARGET_FPS}
                 frameProcessor={frameProcessor}
