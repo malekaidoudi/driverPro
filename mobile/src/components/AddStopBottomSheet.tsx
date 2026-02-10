@@ -21,10 +21,13 @@ import { PlacePrediction, StopType, StopPriority } from '../types';
 import { servicesApi } from '../services/api';
 import OCRScanner from './OCRScannerOptimized';
 import { ParsedAddress, parseOCRText, hasValidAddress } from '../hooks/useOCRParsing';
+import BottomSheet from '@gorhom/bottom-sheet';
 import { ContactSection } from './stop-form/ContactSection';
 import { PackageSection } from './stop-form/PackageSection';
 import { OrderTypeSection } from './stop-form/OrderTypeSection';
 import { ActionMenu } from './stop-form/ActionMenu';
+import PackageFinderSheet from './stop-form/PackageFinderSheet';
+import { PackageLocation } from './stop-form/types';
 
 type ExistingStop = {
     address: string;
@@ -150,6 +153,8 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     const [notes, setNotes] = useState(initialNotes);
     const [packageCount, setPackageCount] = useState(initialPackageCount);
     const [packageFinderId, setPackageFinderId] = useState(initialPackageFinderId);
+    const [packageLocation, setPackageLocation] = useState<PackageLocation | undefined>(undefined);
+    const packageFinderRef = useRef<BottomSheet>(null);
     const [order, setOrder] = useState<StopOrder>(initialOrder);
     const [type, setType] = useState<StopType>(initialType);
     const [priority, setPriority] = useState<StopPriority>(initialPriority);
@@ -193,6 +198,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setNotes(initialNotes);
         setPackageCount(initialPackageCount);
         setPackageFinderId(initialPackageFinderId);
+        setPackageLocation(undefined);
         setOrder(initialOrder);
         setType(initialType);
         setPriority(initialPriority);
@@ -217,6 +223,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setNotes(initialNotes);
         setPackageCount(initialPackageCount);
         setPackageFinderId(initialPackageFinderId);
+        setPackageLocation(undefined);
         setOrder(initialOrder);
         setType(initialType);
         setPriority(initialPriority);
@@ -229,6 +236,20 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setPhoneNumber(initialPhoneNumber);
         setIsCompany(!!initialCompanyName);
     }, [initialAddress, initialCity, initialPostalCode, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialPackageFinderId, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialCompanyName, initialPhoneNumber]);
+
+    // Package finder handlers
+    const handleOpenPackageFinder = useCallback(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        packageFinderRef.current?.expand();
+    }, []);
+
+    const handleSavePackageLocation = useCallback((location: PackageLocation) => {
+        setPackageLocation(location);
+    }, []);
+
+    const handleClearPackageLocation = useCallback(() => {
+        setPackageLocation(undefined);
+    }, []);
 
     React.useImperativeHandle(
         ref,
@@ -953,9 +974,11 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     packageCount={packageCount}
                     packageFinderId={packageFinderId}
                     durationMinutes={durationMinutes}
+                    packageLocation={packageLocation}
                     onPackageCountChange={setPackageCount}
                     onPackageFinderIdChange={setPackageFinderId}
                     onDurationMinutesChange={setDurationMinutes}
+                    onOpenPackageFinder={handleOpenPackageFinder}
                 />
 
                 <OrderTypeSection
@@ -1005,6 +1028,16 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     onClose={handleOCRClose}
                 />
             </Modal>
+
+            {/* Package Finder Sheet */}
+            <PackageFinderSheet
+                ref={packageFinderRef}
+                colors={colors}
+                stopId={autoAddedStopId || undefined}
+                initialLocation={packageLocation}
+                onSave={handleSavePackageLocation}
+                onClear={handleClearPackageLocation}
+            />
         </BottomSheetModal>
     );
 });
