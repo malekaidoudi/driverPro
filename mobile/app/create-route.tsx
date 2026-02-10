@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, P
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/contexts/ThemeContext';
 import { routesApi } from '../src/services/api';
+import { AddressAutocomplete } from '../src/components/AddressAutocomplete';
 
 const getDefaultRouteName = (): string => {
     const days = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
@@ -104,41 +105,27 @@ export default function CreateRouteScreen() {
                     placeholderTextColor={colors.textSecondary}
                 />
 
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
-                    Point de départ (optionnel)
-                </Text>
-                <TextInput
-                    placeholder="Ex: 123 Rue de la Gare, 69001 Lyon"
-                    value={startAddress}
-                    onChangeText={setStartAddress}
-                    style={{
-                        backgroundColor: colors.surface,
-                        padding: 16,
-                        borderRadius: 12,
-                        marginBottom: 16,
-                        fontSize: 16,
-                        color: colors.textPrimary,
-                    }}
-                    placeholderTextColor={colors.textSecondary}
-                />
+                <View style={{ zIndex: 2 }}>
+                    <AddressAutocomplete
+                        label="Point de départ (optionnel)"
+                        placeholder="Ex: 123 Rue de la Gare, 69001 Lyon"
+                        value={startAddress}
+                        onChangeText={setStartAddress}
+                        onSelectAddress={(address) => setStartAddress(address)}
+                    />
+                </View>
 
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 }}>
-                    Point d'arrivée (optionnel)
-                </Text>
-                <TextInput
-                    placeholder="Ex: Même que départ"
-                    value={endAddress}
-                    onChangeText={setEndAddress}
-                    style={{
-                        backgroundColor: colors.surface,
-                        padding: 16,
-                        borderRadius: 12,
-                        marginBottom: 24,
-                        fontSize: 16,
-                        color: colors.textPrimary,
-                    }}
-                    placeholderTextColor={colors.textSecondary}
-                />
+                <View style={{ zIndex: 1 }}>
+                    <AddressAutocomplete
+                        label="Point d'arrivée (optionnel)"
+                        placeholder="Ex: Même que départ"
+                        value={endAddress}
+                        onChangeText={setEndAddress}
+                        onSelectAddress={(address) => setEndAddress(address)}
+                    />
+                </View>
+
+                <View style={{ height: 8 }} />
 
                 <TouchableOpacity
                     onPress={handleCreate}

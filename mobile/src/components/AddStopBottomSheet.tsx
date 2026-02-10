@@ -14,7 +14,7 @@ import {
     ExpoSpeechRecognitionModule,
     useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
-import { Camera, MagnifyingGlass, Microphone, PencilSimple, Trash } from 'phosphor-react-native';
+import { Camera, MagnifyingGlass, Microphone, PencilSimple, Trash, MagnifyingGlassPlus, CopySimple, CaretRight } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { PlacePrediction, StopType, StopPriority } from '../types';
@@ -1118,50 +1118,65 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     </View>
                 )}
 
-                {/* Action Buttons - Always visible */}
-                <View style={{ marginTop: 20, gap: 10 }}>
-                    <TouchableOpacity
-                        onPress={onPressChangeAddress}
-                        style={{
-                            backgroundColor: colors.surface,
-                            padding: 14,
-                            borderRadius: 12,
-                        }}
-                    >
-                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', textAlign: 'left' }}>Modifier l'arrêt</Text>
-                    </TouchableOpacity>
+                {/* Action Buttons - Only when editing */}
+                {showActions && (
+                    <View style={{ marginTop: 20, gap: 2 }}>
+                        <TouchableOpacity
+                            onPress={onPressChangeAddress}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 16,
+                                paddingHorizontal: 4,
+                                borderBottomWidth: 1,
+                                borderBottomColor: colors.border,
+                            }}
+                        >
+                            <MagnifyingGlassPlus size={22} color={colors.textPrimary} />
+                            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '500', marginLeft: 12, flex: 1 }}>Changer l'adresse</Text>
+                            <CaretRight size={20} color={textSecondary} />
+                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                        onPress={onPressDuplicateStop}
-                        style={{
-                            backgroundColor: colors.surface,
-                            padding: 14,
-                            borderRadius: 12,
-                        }}
-                    >
-                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', textAlign: 'left' }}>Dupliquer l'arrêt</Text>
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={onPressDuplicateStop}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 16,
+                                paddingHorizontal: 4,
+                                borderBottomWidth: 1,
+                                borderBottomColor: colors.border,
+                            }}
+                        >
+                            <CopySimple size={22} color={colors.textPrimary} />
+                            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '500', marginLeft: 12, flex: 1 }}>Dupliquer l'arrêt</Text>
+                            <CaretRight size={20} color={textSecondary} />
+                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                        onPress={() => {
-                            Alert.alert('Supprimer', 'Supprimer cet arrêt ?', [
-                                { text: 'Annuler', style: 'cancel' },
-                                {
-                                    text: 'Supprimer',
-                                    style: 'destructive',
-                                    onPress: () => onPressDeleteStop?.(),
-                                },
-                            ]);
-                        }}
-                        style={{
-                            backgroundColor: 'transparent',
-                            padding: 14,
-                            borderRadius: 12,
-                        }}
-                    >
-                        <Text style={{ color: '#DC2626', fontSize: 14, fontWeight: '700', textAlign: 'left' }}>Supprimer l'arrêt </Text>
-                    </TouchableOpacity>
-                </View>
+                        <TouchableOpacity
+                            onPress={() => {
+                                Alert.alert('Supprimer', 'Supprimer cet arrêt ?', [
+                                    { text: 'Annuler', style: 'cancel' },
+                                    {
+                                        text: 'Supprimer',
+                                        style: 'destructive',
+                                        onPress: () => onPressDeleteStop?.(),
+                                    },
+                                ]);
+                            }}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 16,
+                                paddingHorizontal: 4,
+                            }}
+                        >
+                            <Trash size={22} color="#DC2626" />
+                            <Text style={{ color: '#DC2626', fontSize: 16, fontWeight: '500', marginLeft: 12, flex: 1 }}>Supprimer l'arrêt</Text>
+                            <CaretRight size={20} color="#DC2626" />
+                        </TouchableOpacity>
+                    </View>
+                )}
             </BottomSheetScrollView>
 
             {/* OCR Scanner Modal */}
