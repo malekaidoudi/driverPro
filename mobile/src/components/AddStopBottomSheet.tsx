@@ -48,16 +48,20 @@ function extractAnnexFromAddress(address: string): string | null {
 
 export type StopPayload = {
     address: string;
+    city?: string;
+    postalCode?: string;
     latitude: number;
     longitude: number;
     notes: string;
     packageCount: number;
+    packageFinderId?: string;
     order: StopOrder;
     type: StopType;
     priority: StopPriority;
     durationMinutes: number;
     firstName?: string;
     lastName?: string;
+    companyName?: string;
     phoneNumber?: string;
     timeWindowStart?: string;
     timeWindowEnd?: string;
@@ -66,10 +70,13 @@ export type StopPayload = {
 type AddStopBottomSheetProps = {
     title?: string;
     initialAddress?: string;
+    initialCity?: string;
+    initialPostalCode?: string;
     initialLatitude?: number;
     initialLongitude?: number;
     initialNotes?: string;
     initialPackageCount?: number;
+    initialPackageFinderId?: string;
     initialOrder?: StopOrder;
     initialType?: StopType;
     initialPriority?: StopPriority;
@@ -78,6 +85,7 @@ type AddStopBottomSheetProps = {
     initialDurationMinutes?: number;
     initialFirstName?: string;
     initialLastName?: string;
+    initialCompanyName?: string;
     initialPhoneNumber?: string;
     // Mode scan rapide: auto-ajout et mise à jour
     autoAddOnScan?: boolean;
@@ -96,10 +104,13 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     {
         title = 'Ajouter un stop',
         initialAddress = '',
+        initialCity = '',
+        initialPostalCode = '',
         initialLatitude = 0,
         initialLongitude = 0,
         initialNotes = '',
         initialPackageCount = 1,
+        initialPackageFinderId = '',
         initialOrder = 'auto',
         initialType = StopType.DELIVERY,
         initialPriority = StopPriority.NORMAL,
@@ -108,6 +119,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         initialDurationMinutes = 3,
         initialFirstName = '',
         initialLastName = '',
+        initialCompanyName = '',
         initialPhoneNumber = '',
         showActions = false,
         autoAddOnScan = false,
@@ -127,10 +139,13 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     const snapPoints = useMemo(() => ['90%'], []);
 
     const [address, setAddress] = useState(initialAddress);
+    const [city, setCity] = useState(initialCity);
+    const [postalCode, setPostalCode] = useState(initialPostalCode);
     const [latitude, setLatitude] = useState(initialLatitude);
     const [longitude, setLongitude] = useState(initialLongitude);
     const [notes, setNotes] = useState(initialNotes);
     const [packageCount, setPackageCount] = useState(initialPackageCount);
+    const [packageFinderId, setPackageFinderId] = useState(initialPackageFinderId);
     const [order, setOrder] = useState<StopOrder>(initialOrder);
     const [type, setType] = useState<StopType>(initialType);
     const [priority, setPriority] = useState<StopPriority>(initialPriority);
@@ -139,6 +154,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     const [durationMinutes, setDurationMinutes] = useState(initialDurationMinutes);
     const [firstName, setFirstName] = useState(initialFirstName);
     const [lastName, setLastName] = useState(initialLastName);
+    const [companyName, setCompanyName] = useState(initialCompanyName);
     const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber);
 
     const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'processing'>('idle');
@@ -166,10 +182,13 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
 
     const resetForm = useCallback(() => {
         setAddress(initialAddress);
+        setCity(initialCity);
+        setPostalCode(initialPostalCode);
         setLatitude(initialLatitude);
         setLongitude(initialLongitude);
         setNotes(initialNotes);
         setPackageCount(initialPackageCount);
+        setPackageFinderId(initialPackageFinderId);
         setOrder(initialOrder);
         setType(initialType);
         setPriority(initialPriority);
@@ -178,23 +197,22 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setDurationMinutes(initialDurationMinutes);
         setFirstName(initialFirstName);
         setLastName(initialLastName);
+        setCompanyName(initialCompanyName);
         setPhoneNumber(initialPhoneNumber);
         setPredictions([]);
-        // Reset business hours
-        setIsCompany(false);
-        setOpeningMorningStart('09:00');
-        setOpeningMorningEnd('12:00');
-        setOpeningAfternoonStart('13:30');
-        setOpeningAfternoonEnd('17:00');
-    }, [initialAddress, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialPhoneNumber]);
+        setIsCompany(!!initialCompanyName);
+    }, [initialAddress, initialCity, initialPostalCode, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialPackageFinderId, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialCompanyName, initialPhoneNumber]);
 
     // Sync form state when initial values change (e.g., when editing a different stop)
     useEffect(() => {
         setAddress(initialAddress);
+        setCity(initialCity);
+        setPostalCode(initialPostalCode);
         setLatitude(initialLatitude);
         setLongitude(initialLongitude);
         setNotes(initialNotes);
         setPackageCount(initialPackageCount);
+        setPackageFinderId(initialPackageFinderId);
         setOrder(initialOrder);
         setType(initialType);
         setPriority(initialPriority);
@@ -203,8 +221,10 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setDurationMinutes(initialDurationMinutes);
         setFirstName(initialFirstName);
         setLastName(initialLastName);
+        setCompanyName(initialCompanyName);
         setPhoneNumber(initialPhoneNumber);
-    }, [initialAddress, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialPhoneNumber]);
+        setIsCompany(!!initialCompanyName);
+    }, [initialAddress, initialCity, initialPostalCode, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialPackageFinderId, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialCompanyName, initialPhoneNumber]);
 
     React.useImperativeHandle(
         ref,

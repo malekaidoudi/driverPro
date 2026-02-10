@@ -263,4 +263,6 @@ export interface PlaceDetails {
     latitude: number;
     longitude: number;
     place_id: string;
+    city?: string;
+    postalCode?: string;
 }
