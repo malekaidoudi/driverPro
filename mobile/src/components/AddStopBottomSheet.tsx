@@ -14,13 +14,17 @@ import {
     ExpoSpeechRecognitionModule,
     useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
-import { Camera, MagnifyingGlass, Microphone, PencilSimple, Trash, MagnifyingGlassPlus, CopySimple, CaretRight } from 'phosphor-react-native';
+import { Camera, MagnifyingGlass, Microphone } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { PlacePrediction, StopType, StopPriority } from '../types';
 import { servicesApi } from '../services/api';
 import OCRScanner from './OCRScannerOptimized';
 import { ParsedAddress, parseOCRText, hasValidAddress } from '../hooks/useOCRParsing';
+import { ContactSection } from './stop-form/ContactSection';
+import { PackageSection } from './stop-form/PackageSection';
+import { OrderTypeSection } from './stop-form/OrderTypeSection';
+import { ActionMenu } from './stop-form/ActionMenu';
 
 type ExistingStop = {
     address: string;
@@ -816,56 +820,18 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                 )}
 
 
-                <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Prénom</Text>
-                        <TextInput
-                            value={firstName}
-                            onChangeText={setFirstName}
-                            placeholder="Prénom"
-                            placeholderTextColor={textSecondary}
-                            style={{
-                                backgroundColor: colors.background,
-                                borderRadius: 12,
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                color: colors.textPrimary,
-                            }}
-                        />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Nom</Text>
-                        <TextInput
-                            value={lastName}
-                            onChangeText={setLastName}
-                            placeholder="Nom"
-                            placeholderTextColor={textSecondary}
-                            style={{
-                                backgroundColor: colors.background,
-                                borderRadius: 12,
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                color: colors.textPrimary,
-                            }}
-                        />
-                    </View>
-                </View>
-
-                <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Téléphone</Text>
-                <TextInput
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    placeholder="+33 6 12 34 56 78"
-                    placeholderTextColor={textSecondary}
-                    keyboardType="phone-pad"
-                    style={{
-                        backgroundColor: colors.background,
-                        borderRadius: 12,
-                        paddingHorizontal: 12,
-                        paddingVertical: 10,
-                        color: colors.textPrimary,
-                        marginBottom: 12,
-                    }}
+                <ContactSection
+                    colors={colors}
+                    firstName={firstName}
+                    lastName={lastName}
+                    companyName={companyName}
+                    phoneNumber={phoneNumber}
+                    isCompany={isCompany}
+                    onFirstNameChange={setFirstName}
+                    onLastNameChange={setLastName}
+                    onCompanyNameChange={setCompanyName}
+                    onPhoneNumberChange={setPhoneNumber}
+                    onIsCompanyChange={setIsCompany}
                 />
 
                 {/* Horaires d'ouverture pour les personnes morales */}
@@ -982,152 +948,29 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     }}
                 />
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <Text style={{ color: textSecondary, fontSize: 12 }}>Colis</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                        <TouchableOpacity
-                            onPress={() => setPackageCount((p) => Math.max(0, p - 1))}
-                            style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontWeight: '800', fontSize: 18 }}>-</Text>
-                        </TouchableOpacity>
-                        <Text style={{ color: colors.textPrimary, fontWeight: '800', minWidth: 24, textAlign: 'center' }}>{packageCount}</Text>
-                        <TouchableOpacity
-                            onPress={() => setPackageCount((p) => p + 1)}
-                            style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontWeight: '800', fontSize: 18 }}>+</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                <PackageSection
+                    colors={colors}
+                    packageCount={packageCount}
+                    packageFinderId={packageFinderId}
+                    durationMinutes={durationMinutes}
+                    onPackageCountChange={setPackageCount}
+                    onPackageFinderIdChange={setPackageFinderId}
+                    onDurationMinutesChange={setDurationMinutes}
+                />
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <Text style={{ color: textSecondary, fontSize: 12 }}>Ordre</Text>
-                    <View style={{ flexDirection: 'row', backgroundColor: colors.background, borderRadius: 12, padding: 4 }}>
-                        {(
-                            [
-                                { key: 'first', label: 'Premier' },
-                                { key: 'auto', label: 'Auto' },
-                                { key: 'last', label: 'Dernier' },
-                            ] as const
-                        ).map((it) => (
-                            <TouchableOpacity
-                                key={it.key}
-                                onPress={() => setOrder(it.key)}
-                                style={{
-                                    paddingVertical: 8,
-                                    paddingHorizontal: 12,
-                                    borderRadius: 10,
-                                    backgroundColor: order === it.key ? colors.primary : 'transparent',
-                                }}
-                            >
-                                <Text style={{ color: order === it.key ? '#FFFFFF' : colors.textPrimary, fontWeight: '800', fontSize: 12 }}>{it.label}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <Text style={{ color: textSecondary, fontSize: 12 }}>Type</Text>
-                    <View style={{ flexDirection: 'row', backgroundColor: colors.background, borderRadius: 12, padding: 4 }}>
-                        <TouchableOpacity
-                            onPress={() => setType(StopType.DELIVERY)}
-                            style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: type === StopType.DELIVERY ? colors.primary : 'transparent' }}
-                        >
-                            <Text style={{ color: type === StopType.DELIVERY ? '#FFFFFF' : colors.textPrimary, fontWeight: '800', fontSize: 12 }}>Livraison</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => setType(StopType.COLLECTION)}
-                            style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: type === StopType.COLLECTION ? colors.primary : 'transparent' }}
-                        >
-                            <Text style={{ color: type === StopType.COLLECTION ? '#FFFFFF' : colors.textPrimary, fontWeight: '800', fontSize: 12 }}>Collecte</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                {/* Priority selector */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <Text style={{ color: textSecondary, fontSize: 12 }}>Priorité</Text>
-                    <View style={{ flexDirection: 'row', backgroundColor: colors.background, borderRadius: 12, padding: 4 }}>
-                        {([
-                            { key: StopPriority.NORMAL, label: '🟢 Normal', color: '#22C55E' },
-                            { key: StopPriority.HIGH, label: '🟠 Haute', color: '#F59E0B' },
-                            { key: StopPriority.URGENT, label: '🔴 Urgent', color: '#EF4444' },
-                        ] as const).map((it) => (
-                            <TouchableOpacity
-                                key={it.key}
-                                onPress={() => setPriority(it.key)}
-                                style={{
-                                    paddingVertical: 8,
-                                    paddingHorizontal: 10,
-                                    borderRadius: 10,
-                                    backgroundColor: priority === it.key ? it.color : 'transparent',
-                                }}
-                            >
-                                <Text style={{ color: priority === it.key ? '#FFFFFF' : colors.textPrimary, fontWeight: '800', fontSize: 11 }}>{it.label}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </View>
-
-                {/* Time window */}
-                <View style={{ marginBottom: 12 }}>
-                    <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Créneau horaire (optionnel)</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <TextInput
-                            value={timeWindowStart}
-                            onChangeText={setTimeWindowStart}
-                            placeholder="08:00"
-                            placeholderTextColor={textSecondary}
-                            keyboardType="numbers-and-punctuation"
-                            style={{
-                                flex: 1,
-                                backgroundColor: colors.background,
-                                borderRadius: 12,
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                color: colors.textPrimary,
-                                textAlign: 'center',
-                            }}
-                        />
-                        <Text style={{ color: textSecondary }}>→</Text>
-                        <TextInput
-                            value={timeWindowEnd}
-                            onChangeText={setTimeWindowEnd}
-                            placeholder="12:00"
-                            placeholderTextColor={textSecondary}
-                            keyboardType="numbers-and-punctuation"
-                            style={{
-                                flex: 1,
-                                backgroundColor: colors.background,
-                                borderRadius: 12,
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                color: colors.textPrimary,
-                                textAlign: 'center',
-                            }}
-                        />
-                    </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-                    <Text style={{ color: textSecondary, fontSize: 12 }}>Durée d'arrêt estimée</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                        <TouchableOpacity
-                            onPress={() => setDurationMinutes((p) => Math.max(0, p - 1))}
-                            style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontWeight: '800', fontSize: 18 }}>-</Text>
-                        </TouchableOpacity>
-                        <Text style={{ color: colors.textPrimary, fontWeight: '800', minWidth: 56, textAlign: 'center' }}>{durationMinutes} min</Text>
-                        <TouchableOpacity
-                            onPress={() => setDurationMinutes((p) => p + 1)}
-                            style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}
-                        >
-                            <Text style={{ color: colors.textPrimary, fontWeight: '800', fontSize: 18 }}>+</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                <OrderTypeSection
+                    colors={colors}
+                    order={order}
+                    type={type}
+                    priority={priority}
+                    timeWindowStart={timeWindowStart}
+                    timeWindowEnd={timeWindowEnd}
+                    onOrderChange={setOrder}
+                    onTypeChange={setType}
+                    onPriorityChange={setPriority}
+                    onTimeWindowStartChange={setTimeWindowStart}
+                    onTimeWindowEndChange={setTimeWindowEnd}
+                />
 
                 {/* Info sur l'ajout automatique */}
                 {latitude !== 0 && longitude !== 0 && (
@@ -1140,62 +983,12 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
 
                 {/* Action Buttons - Only when editing */}
                 {showActions && (
-                    <View style={{ marginTop: 20, gap: 2 }}>
-                        <TouchableOpacity
-                            onPress={onPressChangeAddress}
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                paddingVertical: 16,
-                                paddingHorizontal: 4,
-                                borderBottomWidth: 1,
-                                borderBottomColor: colors.border,
-                            }}
-                        >
-                            <MagnifyingGlassPlus size={22} color={colors.textPrimary} />
-                            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '500', marginLeft: 12, flex: 1 }}>Changer l'adresse</Text>
-                            <CaretRight size={20} color={textSecondary} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={onPressDuplicateStop}
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                paddingVertical: 16,
-                                paddingHorizontal: 4,
-                                borderBottomWidth: 1,
-                                borderBottomColor: colors.border,
-                            }}
-                        >
-                            <CopySimple size={22} color={colors.textPrimary} />
-                            <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '500', marginLeft: 12, flex: 1 }}>Dupliquer l'arrêt</Text>
-                            <CaretRight size={20} color={textSecondary} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={() => {
-                                Alert.alert('Supprimer', 'Supprimer cet arrêt ?', [
-                                    { text: 'Annuler', style: 'cancel' },
-                                    {
-                                        text: 'Supprimer',
-                                        style: 'destructive',
-                                        onPress: () => onPressDeleteStop?.(),
-                                    },
-                                ]);
-                            }}
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                paddingVertical: 16,
-                                paddingHorizontal: 4,
-                            }}
-                        >
-                            <Trash size={22} color="#DC2626" />
-                            <Text style={{ color: '#DC2626', fontSize: 16, fontWeight: '500', marginLeft: 12, flex: 1 }}>Supprimer l'arrêt</Text>
-                            <CaretRight size={20} color="#DC2626" />
-                        </TouchableOpacity>
-                    </View>
+                    <ActionMenu
+                        colors={colors}
+                        onPressChangeAddress={onPressChangeAddress}
+                        onPressDuplicateStop={onPressDuplicateStop}
+                        onPressDeleteStop={onPressDeleteStop}
+                    />
                 )}
             </BottomSheetScrollView>
 
