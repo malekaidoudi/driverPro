@@ -188,6 +188,24 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setOpeningAfternoonEnd('17:00');
     }, [initialAddress, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialPhoneNumber]);
 
+    // Sync form state when initial values change (e.g., when editing a different stop)
+    useEffect(() => {
+        setAddress(initialAddress);
+        setLatitude(initialLatitude);
+        setLongitude(initialLongitude);
+        setNotes(initialNotes);
+        setPackageCount(initialPackageCount);
+        setOrder(initialOrder);
+        setType(initialType);
+        setPriority(initialPriority);
+        setTimeWindowStart(initialTimeWindowStart);
+        setTimeWindowEnd(initialTimeWindowEnd);
+        setDurationMinutes(initialDurationMinutes);
+        setFirstName(initialFirstName);
+        setLastName(initialLastName);
+        setPhoneNumber(initialPhoneNumber);
+    }, [initialAddress, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialPhoneNumber]);
+
     React.useImperativeHandle(
         ref,
         () => ({

@@ -70,40 +70,56 @@ async def _add_recurring_stops_to_route(
     supabase: Client
 ):
     """Auto-add active recurring stops for the day of week"""
-    day_of_week = route_date.isoweekday()  # 1=Monday, 7=Sunday
-    
-    # Get active recurring stops for this day
-    recurring_response = supabase.table("recurring_stops").select("*").eq(
-        "user_id", user_id
-    ).eq("is_active", True).contains("days_of_week", [day_of_week]).execute()
-    
-    if not recurring_response.data:
-        return
-    
-    # Create stops from recurring stops
-    stops_to_create = []
-    for recurring in recurring_response.data:
-        stop_data = {
-            "route_id": route_id,
-            "address": recurring["address"],
-            "address_complement": recurring.get("address_complement"),
-            "postal_code": recurring.get("postal_code"),
-            "city": recurring.get("city"),
-            "latitude": recurring["latitude"],
-            "longitude": recurring["longitude"],
-            "first_name": recurring.get("first_name"),
-            "last_name": recurring.get("last_name"),
-            "phone_number": recurring.get("phone_number"),
-            "notes": recurring.get("notes"),
-            "package_count": recurring.get("default_package_count", 1),
-            "order_preference": recurring.get("default_order_preference", "auto"),
-            "recurring_stop_id": recurring["id"],
-            "status": "pending",
-        }
-        stops_to_create.append(stop_data)
-    
-    if stops_to_create:
-        supabase.table("stops").insert(stops_to_create).execute()
+    try:
+        day_of_week = route_date.isoweekday()  # 1=Monday, 7=Sunday
+        
+        # Get active recurring stops for this day
+        recurring_response = supabase.table("recurring_stops").select("*").eq(
+            "user_id", user_id
+        ).eq("is_active", True).contains("days_of_week", [day_of_week]).execute()
+        
+        if not recurring_response.data:
+            return
+        
+        # Create stops from recurring stops
+        stops_to_create = []
+        for recurring in recurring_response.data:
+            stop_data = {
+                "route_id": route_id,
+                "address": recurring["address"],
+                "latitude": recurring["latitude"],
+                "longitude": recurring["longitude"],
+                "status": "pending",
+            }
+            # Add optional fields only if they exist
+            if recurring.get("address_complement"):
+                stop_data["address_complement"] = recurring["address_complement"]
+            if recurring.get("postal_code"):
+                stop_data["postal_code"] = recurring["postal_code"]
+            if recurring.get("city"):
+                stop_data["city"] = recurring["city"]
+            if recurring.get("first_name"):
+                stop_data["first_name"] = recurring["first_name"]
+            if recurring.get("last_name"):
+                stop_data["last_name"] = recurring["last_name"]
+            if recurring.get("phone_number"):
+                stop_data["phone_number"] = recurring["phone_number"]
+            if recurring.get("notes"):
+                stop_data["notes"] = recurring["notes"]
+            if recurring.get("default_package_count"):
+                stop_data["package_count"] = recurring["default_package_count"]
+            if recurring.get("default_order_preference"):
+                stop_data["order_preference"] = recurring["default_order_preference"]
+            if recurring.get("id"):
+                stop_data["recurring_stop_id"] = recurring["id"]
+            
+            stops_to_create.append(stop_data)
+        
+        if stops_to_create:
+            supabase.table("stops").insert(stops_to_create).execute()
+    except Exception as e:
+        # Log but don't fail route creation if recurring stops fail
+        print(f"Warning: Failed to add recurring stops: {e}")
 
 
 @router.get("/{route_id}", response_model=RouteWithStops)
