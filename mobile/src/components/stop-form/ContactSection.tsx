@@ -3,13 +3,11 @@ import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { FormSectionProps } from './types';
 
 interface ContactSectionProps extends FormSectionProps {
-    firstName: string;
-    lastName: string;
+    fullName: string;
     companyName: string;
     phoneNumber: string;
     isCompany: boolean;
-    onFirstNameChange: (value: string) => void;
-    onLastNameChange: (value: string) => void;
+    onFullNameChange: (value: string) => void;
     onCompanyNameChange: (value: string) => void;
     onPhoneNumberChange: (value: string) => void;
     onIsCompanyChange: (value: boolean) => void;
@@ -17,13 +15,11 @@ interface ContactSectionProps extends FormSectionProps {
 
 export function ContactSection({
     colors,
-    firstName,
-    lastName,
+    fullName,
     companyName,
     phoneNumber,
     isCompany,
-    onFirstNameChange,
-    onLastNameChange,
+    onFullNameChange,
     onCompanyNameChange,
     onPhoneNumberChange,
     onIsCompanyChange,
@@ -80,39 +76,21 @@ export function ContactSection({
                     />
                 </View>
             ) : (
-                <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Prénom</Text>
-                        <TextInput
-                            value={firstName}
-                            onChangeText={onFirstNameChange}
-                            placeholder="Prénom"
-                            placeholderTextColor={textSecondary}
-                            style={{
-                                backgroundColor: colors.background,
-                                borderRadius: 12,
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                color: colors.textPrimary,
-                            }}
-                        />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Nom</Text>
-                        <TextInput
-                            value={lastName}
-                            onChangeText={onLastNameChange}
-                            placeholder="Nom"
-                            placeholderTextColor={textSecondary}
-                            style={{
-                                backgroundColor: colors.background,
-                                borderRadius: 12,
-                                paddingHorizontal: 12,
-                                paddingVertical: 10,
-                                color: colors.textPrimary,
-                            }}
-                        />
-                    </View>
+                <View style={{ marginBottom: 12 }}>
+                    <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Nom complet</Text>
+                    <TextInput
+                        value={fullName}
+                        onChangeText={onFullNameChange}
+                        placeholder="Nom complet du destinataire"
+                        placeholderTextColor={textSecondary}
+                        style={{
+                            backgroundColor: colors.background,
+                            borderRadius: 12,
+                            paddingHorizontal: 12,
+                            paddingVertical: 10,
+                            color: colors.textPrimary,
+                        }}
+                    />
                 </View>
             )}
 

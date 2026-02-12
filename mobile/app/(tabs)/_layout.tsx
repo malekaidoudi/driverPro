@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { House, MapTrifold, Gear } from 'phosphor-react-native';
+import { MapTrifold, CalendarBlank, Path, Gear } from 'phosphor-react-native';
 
 export default function TabsLayout() {
     const { colors } = useTheme();
@@ -18,18 +18,27 @@ export default function TabsLayout() {
             }}
         >
             <Tabs.Screen
+                name="map"
+                options={{
+                    title: 'Carte',
+                    tabBarIcon: ({ color, size }) => <MapTrifold size={size} color={color} />,
+                }}
+            />
+            <Tabs.Screen
                 name="home"
                 options={{
-                    title: 'Accueil',
-                    tabBarIcon: ({ color, size }) => <House size={size} color={color} />,
+                    title: 'Planifier',
+                    tabBarIcon: ({ color, size }) => <CalendarBlank size={size} color={color} />,
                 }}
             />
             <Tabs.Screen
                 name="routes"
                 options={{
-                    title: 'Tournées',
-                    tabBarIcon: ({ color, size }) => <MapTrifold size={size} color={color} />,
+                    title: 'Tournée',
+                    tabBarIcon: ({ color, size }) => <Path size={size} color={color} />,
                 }}
+                //title: 'Tournées',
+                //tabBarIcon: ({color, size}) => <MapTrifold size={size} color={color} />
             />
             <Tabs.Screen
                 name="settings"

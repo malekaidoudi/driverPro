@@ -14,7 +14,7 @@ interface PackageFinderSheetProps extends FormSectionProps {
 
 const PackageFinderSheet = forwardRef<BottomSheet, PackageFinderSheetProps>(
     ({ colors, stopId, initialLocation, onSave, onClear }, ref) => {
-        const snapPoints = useMemo(() => ['70%'], []);
+        const snapPoints = useMemo(() => ['85%'], []);
         const textSecondary = colors.textSecondary;
 
         // Local state
@@ -68,15 +68,15 @@ const PackageFinderSheet = forwardRef<BottomSheet, PackageFinderSheetProps>(
         }, []);
 
         // Option button component
-        const OptionButton = ({ 
-            label, 
-            selected, 
-            onPress, 
+        const OptionButton = ({
+            label,
+            selected,
+            onPress,
             icon,
-            flex = 1 
-        }: { 
-            label: string; 
-            selected: boolean; 
+            flex = 1
+        }: {
+            label: string;
+            selected: boolean;
             onPress: () => void;
             icon?: React.ReactNode;
             flex?: number;
@@ -85,7 +85,7 @@ const PackageFinderSheet = forwardRef<BottomSheet, PackageFinderSheetProps>(
                 onPress={onPress}
                 style={[
                     styles.optionButton,
-                    { 
+                    {
                         backgroundColor: colors.surface,
                         borderColor: selected ? colors.primary : colors.border,
                         borderWidth: selected ? 2 : 1,
@@ -94,8 +94,8 @@ const PackageFinderSheet = forwardRef<BottomSheet, PackageFinderSheetProps>(
                 ]}
             >
                 {icon && <View style={{ marginRight: 6 }}>{icon}</View>}
-                <Text style={{ 
-                    color: selected ? colors.primary : colors.textPrimary, 
+                <Text style={{
+                    color: selected ? colors.primary : colors.textPrimary,
                     fontWeight: selected ? '700' : '500',
                     fontSize: 14,
                 }}>
@@ -142,7 +142,7 @@ const PackageFinderSheet = forwardRef<BottomSheet, PackageFinderSheetProps>(
                     {/* Package Description */}
                     <View style={styles.section}>
                         <Text style={[styles.label, { color: textSecondary }]}>Description du colis</Text>
-                        
+
                         {/* Size */}
                         <View style={styles.optionRow}>
                             <OptionButton
@@ -186,7 +186,7 @@ const PackageFinderSheet = forwardRef<BottomSheet, PackageFinderSheetProps>(
                     {/* Vehicle Position */}
                     <View style={styles.section}>
                         <Text style={[styles.label, { color: textSecondary }]}>Emplacement dans le véhicule</Text>
-                        
+
                         {/* Depth: Front/Middle/Back */}
                         <View style={styles.optionRow}>
                             <OptionButton

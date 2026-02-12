@@ -19,12 +19,76 @@ import Constants from 'expo-constants';
 
 const API_URL = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Cold start timeout: Render free tier can take 30-60s to wake up
+const COLD_START_TIMEOUT = 90000; // 90 seconds for cold start
+const NORMAL_TIMEOUT = 30000;     // 30 seconds for normal requests
+const MAX_RETRIES = 2;            // Retry twice on timeout/network error
+
 const api = axios.create({
     baseURL: API_URL,
+    timeout: COLD_START_TIMEOUT, // Start with cold start timeout
     headers: {
         'Content-Type': 'application/json',
     },
 });
+
+// Track if backend is warmed up
+let isBackendWarmed = false;
+
+// Retry logic for cold start
+api.interceptors.response.use(
+    (response) => {
+        // Backend responded - it's warmed up now
+        isBackendWarmed = true;
+        api.defaults.timeout = NORMAL_TIMEOUT;
+        return response;
+    },
+    async (error) => {
+        const config = error.config;
+
+        // Don't retry if we've already retried max times
+        config.__retryCount = config.__retryCount || 0;
+
+        // Only retry on timeout or network errors
+        const isRetryable =
+            error.code === 'ECONNABORTED' || // timeout
+            error.code === 'ERR_NETWORK' ||  // network error
+            !error.response;                  // no response (server down)
+
+        if (isRetryable && config.__retryCount < MAX_RETRIES) {
+            config.__retryCount += 1;
+            console.log(`[API] Retry ${config.__retryCount}/${MAX_RETRIES} - Backend may be waking up...`);
+
+            // Wait before retry (exponential backoff)
+            const delay = Math.min(1000 * Math.pow(2, config.__retryCount), 5000);
+            await new Promise(resolve => setTimeout(resolve, delay));
+
+            return api(config);
+        }
+
+        return Promise.reject(error);
+    }
+);
+
+/**
+ * Warm up the backend (call this on app start)
+ * Makes a lightweight health check to wake up Render
+ */
+export const warmupBackend = async (): Promise<boolean> => {
+    if (isBackendWarmed) return true;
+
+    try {
+        console.log('[API] Warming up backend...');
+        await api.get('/health', { timeout: COLD_START_TIMEOUT });
+        isBackendWarmed = true;
+        api.defaults.timeout = NORMAL_TIMEOUT;
+        console.log('[API] Backend is ready!');
+        return true;
+    } catch (error) {
+        console.warn('[API] Backend warmup failed:', error);
+        return false;
+    }
+};
 
 let authToken: string | null = null;
 

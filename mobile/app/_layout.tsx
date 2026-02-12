@@ -1,5 +1,6 @@
 import 'react-native-gesture-handler';
 
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -8,8 +9,13 @@ import { AuthProvider } from '../src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
+import { warmupBackend } from '../src/services/api';
 
 function RootLayoutContent() {
+    // Warm up backend on app start (handles Render cold start)
+    useEffect(() => {
+        warmupBackend();
+    }, []);
     const { activeTheme, colors } = useTheme();
 
     return (

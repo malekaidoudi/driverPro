@@ -2,8 +2,10 @@ import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } 
 import {
     ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
     Modal,
     Platform,
+    ScrollView,
     Text,
     TextInput,
     TouchableOpacity,
@@ -14,7 +16,7 @@ import {
     ExpoSpeechRecognitionModule,
     useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
-import { Camera, MagnifyingGlass, Microphone } from 'phosphor-react-native';
+import { Camera, MagnifyingGlass, Microphone, PencilSimple, X, MapPin } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { PlacePrediction, StopType, StopPriority } from '../types';
@@ -66,8 +68,7 @@ export type StopPayload = {
     type: StopType;
     priority: StopPriority;
     durationMinutes: number;
-    firstName?: string;
-    lastName?: string;
+    fullName?: string;
     companyName?: string;
     phoneNumber?: string;
     timeWindowStart?: string;
@@ -90,8 +91,7 @@ type AddStopBottomSheetProps = {
     initialTimeWindowStart?: string;
     initialTimeWindowEnd?: string;
     initialDurationMinutes?: number;
-    initialFirstName?: string;
-    initialLastName?: string;
+    initialFullName?: string;
     initialCompanyName?: string;
     initialPhoneNumber?: string;
     // Mode scan rapide: auto-ajout et mise à jour
@@ -124,8 +124,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         initialTimeWindowStart = '',
         initialTimeWindowEnd = '',
         initialDurationMinutes = 3,
-        initialFirstName = '',
-        initialLastName = '',
+        initialFullName = '',
         initialCompanyName = '',
         initialPhoneNumber = '',
         showActions = false,
@@ -161,8 +160,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     const [timeWindowStart, setTimeWindowStart] = useState(initialTimeWindowStart);
     const [timeWindowEnd, setTimeWindowEnd] = useState(initialTimeWindowEnd);
     const [durationMinutes, setDurationMinutes] = useState(initialDurationMinutes);
-    const [firstName, setFirstName] = useState(initialFirstName);
-    const [lastName, setLastName] = useState(initialLastName);
+    const [fullName, setFullName] = useState(initialFullName);
     const [companyName, setCompanyName] = useState(initialCompanyName);
     const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber);
 
@@ -173,6 +171,12 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     // Auto-add mode: track if stop was auto-added and needs update on dismiss
     const [autoAddedStopId, setAutoAddedStopId] = useState<string | null>(null);
     const scanModeRef = useRef(false); // Track if we came from OCR scan
+
+    // Change address overlay state
+    const [changeAddressVisible, setChangeAddressVisible] = useState(false);
+    const [tempAddress, setTempAddress] = useState('');
+    const [tempPredictions, setTempPredictions] = useState<PlacePrediction[]>([]);
+    const [tempPredictionsLoading, setTempPredictionsLoading] = useState(false);
 
     // Business opening hours (personnes morales)
     const [isCompany, setIsCompany] = useState(false);
@@ -205,13 +209,13 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setTimeWindowStart(initialTimeWindowStart);
         setTimeWindowEnd(initialTimeWindowEnd);
         setDurationMinutes(initialDurationMinutes);
-        setFirstName(initialFirstName);
-        setLastName(initialLastName);
+        setFullName(initialFullName);
+        setFullName(initialFullName);
         setCompanyName(initialCompanyName);
         setPhoneNumber(initialPhoneNumber);
         setPredictions([]);
         setIsCompany(!!initialCompanyName);
-    }, [initialAddress, initialCity, initialPostalCode, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialPackageFinderId, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialCompanyName, initialPhoneNumber]);
+    }, [initialAddress, initialCity, initialPostalCode, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialPackageFinderId, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFullName, initialFullName, initialCompanyName, initialPhoneNumber]);
 
     // Sync form state when initial values change (e.g., when editing a different stop)
     useEffect(() => {
@@ -230,12 +234,12 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setTimeWindowStart(initialTimeWindowStart);
         setTimeWindowEnd(initialTimeWindowEnd);
         setDurationMinutes(initialDurationMinutes);
-        setFirstName(initialFirstName);
-        setLastName(initialLastName);
+        setFullName(initialFullName);
+        setFullName(initialFullName);
         setCompanyName(initialCompanyName);
         setPhoneNumber(initialPhoneNumber);
         setIsCompany(!!initialCompanyName);
-    }, [initialAddress, initialCity, initialPostalCode, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialPackageFinderId, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFirstName, initialLastName, initialCompanyName, initialPhoneNumber]);
+    }, [initialAddress, initialCity, initialPostalCode, initialLatitude, initialLongitude, initialNotes, initialPackageCount, initialPackageFinderId, initialOrder, initialType, initialPriority, initialTimeWindowStart, initialTimeWindowEnd, initialDurationMinutes, initialFullName, initialFullName, initialCompanyName, initialPhoneNumber]);
 
     // Package finder handlers
     const handleOpenPackageFinder = useCallback(() => {
@@ -377,6 +381,8 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         try {
             await onPressAdd?.({
                 address: address.trim(),
+                city: city.trim() || undefined,
+                postalCode: postalCode.trim() || undefined,
                 latitude,
                 longitude,
                 notes: notes.trim(),
@@ -385,8 +391,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                 type,
                 priority,
                 durationMinutes,
-                firstName: firstName.trim() || undefined,
-                lastName: lastName.trim() || undefined,
+                fullName: fullName.trim() || undefined,
                 phoneNumber: phoneNumber.trim() || undefined,
                 timeWindowStart: timeWindowStart.trim() || undefined,
                 timeWindowEnd: timeWindowEnd.trim() || undefined,
@@ -401,8 +406,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
             setOrder('auto');
             setType(StopType.DELIVERY);
             setDurationMinutes(3);
-            setFirstName('');
-            setLastName('');
+            setFullName('');
             setPhoneNumber('');
             return true;
         } catch (e: any) {
@@ -411,7 +415,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         } finally {
             setSubmitting(false);
         }
-    }, [address, latitude, longitude, notes, packageCount, order, type, durationMinutes, firstName, lastName, phoneNumber, onPressAdd]);
+    }, [address, latitude, longitude, notes, packageCount, order, type, durationMinutes, fullName, fullName, phoneNumber, onPressAdd]);
 
     const onPressScanOCR = useCallback(async () => {
         // Auto-ajouter le stop en attente avant d'ouvrir le scanner
@@ -435,8 +439,8 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         const newType = StopType.DELIVERY;
         const newDurationMinutes = 3;
 
-        setFirstName('');
-        setLastName('');
+        setFullName('');
+        setFullName('');
         setPhoneNumber('');
         setNotes('');
         setPackageCount(1);
@@ -473,19 +477,15 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
 
         // Remplir les infos contact/société si détectées
         if (data.companyName) {
-            newLastName = data.companyName;
-            setFirstName('');
-            setLastName(data.companyName);
+            setCompanyName(data.companyName);
             setIsCompany(true);
         } else {
             setIsCompany(false);
-            if (data.firstName) {
-                newFirstName = data.firstName;
-                setFirstName(data.firstName);
-            }
-            if (data.lastName) {
-                newLastName = data.lastName;
-                setLastName(data.lastName);
+            // Combine firstName + lastName into fullName
+            const parsedFullName = [data.firstName, data.lastName].filter(Boolean).join(' ');
+            if (parsedFullName) {
+                newFirstName = parsedFullName;
+                setFullName(parsedFullName);
             }
         }
         if (data.phoneNumber) {
@@ -507,6 +507,8 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
             try {
                 const payload: StopPayload = {
                     address: finalAddress,
+                    city: city.trim() || undefined,
+                    postalCode: postalCode.trim() || undefined,
                     latitude: geocodedLat,
                     longitude: geocodedLng,
                     notes: newNotes,
@@ -515,8 +517,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     type: newType,
                     priority: StopPriority.NORMAL,
                     durationMinutes: newDurationMinutes,
-                    firstName: newFirstName || undefined,
-                    lastName: newLastName || undefined,
+                    fullName: newFirstName || undefined,
                     phoneNumber: newPhoneNumber || undefined,
                 };
                 const result = await onPressAdd(payload);
@@ -553,22 +554,19 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         // Reset fields for new input
         skipAutocompleteRef.current = true;
         setPredictions([]);
-        setFirstName('');
-        setLastName('');
+        setFullName('');
         setPhoneNumber('');
         setNotes('');
 
         // Fill form with parsed data (company or individual)
         if (parsed.companyName) {
-            // Personne morale: mettre le nom de société dans lastName + activer horaires
-            setLastName(parsed.companyName);
+            setCompanyName(parsed.companyName);
             setIsCompany(true);
             console.log('[VOICE] Company detected:', parsed.companyName);
         } else {
-            // Personne physique: prénom + nom
             setIsCompany(false);
-            if (parsed.firstName) setFirstName(parsed.firstName);
-            if (parsed.lastName) setLastName(parsed.lastName);
+            const voiceFullName = [parsed.firstName, parsed.lastName].filter(Boolean).join(' ');
+            if (voiceFullName) setFullName(voiceFullName);
         }
         if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
         if (parsed.addressAnnex) setNotes(parsed.addressAnnex);
@@ -672,8 +670,8 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
         setLatitude(0);
         setLongitude(0);
         setNotes('');
-        setFirstName('');
-        setLastName('');
+        setFullName('');
+        setFullName('');
         setPhoneNumber('');
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }, []);
@@ -694,6 +692,8 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
             if (stopIdToUpdate && onUpdateStop) {
                 Promise.resolve(onUpdateStop(stopIdToUpdate, {
                     address: address.trim(),
+                    city: city.trim() || undefined,
+                    postalCode: postalCode.trim() || undefined,
                     latitude,
                     longitude,
                     notes: notes.trim(),
@@ -702,8 +702,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     type,
                     priority,
                     durationMinutes,
-                    firstName: firstName.trim() || undefined,
-                    lastName: lastName.trim() || undefined,
+                    fullName: fullName.trim() || undefined,
                     phoneNumber: phoneNumber.trim() || undefined,
                     timeWindowStart: timeWindowStart.trim() || undefined,
                     timeWindowEnd: timeWindowEnd.trim() || undefined,
@@ -717,7 +716,62 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                 onDismissAfterScan();
             }
         }
-    }, [autoAddedStopId, onUpdateStop, onDismissAfterScan, address, latitude, longitude, notes, packageCount, order, type, priority, durationMinutes, firstName, lastName, phoneNumber, timeWindowStart, timeWindowEnd]);
+    }, [autoAddedStopId, onUpdateStop, onDismissAfterScan, address, latitude, longitude, notes, packageCount, order, type, priority, durationMinutes, fullName, phoneNumber, timeWindowStart, timeWindowEnd]);
+
+    // Autocomplete pour le changement d'adresse
+    useEffect(() => {
+        const q = tempAddress.trim();
+        if (q.length < 3) {
+            setTempPredictions([]);
+            return;
+        }
+
+        setTempPredictionsLoading(true);
+        const timeout = setTimeout(async () => {
+            try {
+                const results = await servicesApi.autocomplete(q);
+                setTempPredictions(results);
+            } catch {
+                setTempPredictions([]);
+            } finally {
+                setTempPredictionsLoading(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(timeout);
+    }, [tempAddress]);
+
+    // Sélectionner une prédiction dans l'overlay de changement d'adresse
+    const selectTempPrediction = useCallback(async (prediction: PlacePrediction) => {
+        try {
+            const details = await servicesApi.getPlaceDetails(prediction.place_id);
+            if (details?.latitude && details?.longitude) {
+                setAddress(details.address);
+                setLatitude(details.latitude);
+                setLongitude(details.longitude);
+                if (details.city) setCity(details.city);
+                if (details.postalCode) setPostalCode(details.postalCode);
+
+                setTempPredictions([]);
+                setChangeAddressVisible(false);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } catch (e) {
+            console.error('[ChangeAddress] Failed to get place details:', e);
+        }
+    }, []);
+
+    // Ouvrir le scanner OCR depuis l'overlay de changement d'adresse
+    const handleChangeAddressScan = useCallback(() => {
+        setChangeAddressVisible(false);
+        setOcrScannerVisible(true);
+    }, []);
+
+    // Utiliser la voix depuis l'overlay de changement d'adresse
+    const handleChangeAddressVoice = useCallback(() => {
+        setChangeAddressVisible(false);
+        onPressVoiceInput();
+    }, [onPressVoiceInput]);
 
     return (
         <BottomSheetModal
@@ -746,110 +800,181 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                     )}
                 </View>
 
-                <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Adresse</Text>
-
-                <View
-                    style={{
-                        backgroundColor: colors.background,
-                        borderRadius: 12,
-                        height: 48,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        paddingLeft: 12,
-                        paddingRight: 6,
-                        marginBottom: predictions.length > 0 ? 0 : 12,
-                    }}
-                >
-                    <MagnifyingGlass size={18} color={textSecondary} />
-
-                    <TextInput
-                        value={address}
-                        onChangeText={handleAddressChange}
-                        placeholder="Ajouter ou trouver des arrêts"
-                        placeholderTextColor={textSecondary}
-                        editable={autoAddedStopId !== null || latitude === 0 || longitude === 0}
-                        style={{
-                            flex: 1,
-                            color: colors.textPrimary,
-                            paddingHorizontal: 10,
-                            paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-                        }}
-                    />
-
-                    <TouchableOpacity
-                        onPress={onPressScanOCR}
-                        style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: 12,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}
-                    >
-                        <Camera size={20} color={colors.textPrimary} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        onPress={onPressVoiceInput}
-                        style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: 12,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: voiceState === 'listening' ? colors.primary : 'transparent',
-                            opacity: voiceState === 'processing' ? 0.7 : 1,
-                        }}
-                    >
-                        {voiceState === 'processing' ? (
-                            <ActivityIndicator size="small" color={colors.primary} />
-                        ) : (
-                            <Microphone size={20} color={voiceState === 'listening' ? '#FFFFFF' : colors.textPrimary} />
-                        )}
-                    </TouchableOpacity>
-                </View>
-
-                {voiceState === 'listening' && (
-                    <Text style={{ color: colors.primary, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
-                        🎤 Écoute en cours... Appuie à nouveau pour arrêter
-                    </Text>
-                )}
-
-                {predictionsLoading && (
-                    <View style={{ paddingVertical: 12 }}>
-                        <ActivityIndicator size="small" color={colors.primary} />
-                    </View>
-                )}
-
-                {predictions.length > 0 && (
-                    <View style={{ backgroundColor: colors.background, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
-                        {predictions.slice(0, 5).map((p) => (
+                {/* Affichage de l'adresse: paragraphe après scan, ou inputs pour nouveau stop */}
+                {autoAddedStopId && address ? (
+                    <View style={{ marginBottom: 16 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 4 }}>
+                                    {address}
+                                </Text>
+                                <Text style={{ color: textSecondary, fontSize: 14 }}>
+                                    {[city, postalCode].filter(Boolean).join(', ')}
+                                </Text>
+                            </View>
                             <TouchableOpacity
-                                key={p.place_id}
-                                onPress={() => selectPrediction(p)}
-                                style={{ paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: textSecondary + '20' }}
+                                onPress={() => {
+                                    setTempAddress(address);
+                                    setChangeAddressVisible(true);
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                }}
+                                style={{
+                                    backgroundColor: colors.background,
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 8,
+                                    borderRadius: 8,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                }}
                             >
-                                <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>
-                                    {p.structured_formatting?.main_text ?? p.description}
-                                </Text>
-                                <Text style={{ color: textSecondary, marginTop: 2 }}>
-                                    {p.structured_formatting?.secondary_text ?? ''}
-                                </Text>
+                                <PencilSimple size={16} color={colors.primary} />
+                                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>Changer</Text>
                             </TouchableOpacity>
-                        ))}
+                        </View>
                     </View>
-                )}
+                ) : (
+                    <>
+                        <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Adresse</Text>
 
+                        <View
+                            style={{
+                                backgroundColor: colors.background,
+                                borderRadius: 12,
+                                height: 48,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingLeft: 12,
+                                paddingRight: 6,
+                                marginBottom: predictions.length > 0 ? 0 : 12,
+                            }}
+                        >
+                            <MagnifyingGlass size={18} color={textSecondary} />
+
+                            <TextInput
+                                value={address}
+                                onChangeText={handleAddressChange}
+                                placeholder="Ajouter ou trouver des arrêts"
+                                placeholderTextColor={textSecondary}
+                                style={{
+                                    flex: 1,
+                                    color: colors.textPrimary,
+                                    paddingHorizontal: 10,
+                                    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+                                }}
+                            />
+
+                            <TouchableOpacity
+                                onPress={onPressScanOCR}
+                                style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: 12,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                <Camera size={20} color={colors.textPrimary} />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                onPress={onPressVoiceInput}
+                                style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: 12,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    backgroundColor: voiceState === 'listening' ? colors.primary : 'transparent',
+                                    opacity: voiceState === 'processing' ? 0.7 : 1,
+                                }}
+                            >
+                                {voiceState === 'processing' ? (
+                                    <ActivityIndicator size="small" color={colors.primary} />
+                                ) : (
+                                    <Microphone size={20} color={voiceState === 'listening' ? '#FFFFFF' : colors.textPrimary} />
+                                )}
+                            </TouchableOpacity>
+                        </View>
+
+                        {voiceState === 'listening' && (
+                            <Text style={{ color: colors.primary, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
+                                🎤 Écoute en cours... Appuie à nouveau pour arrêter
+                            </Text>
+                        )}
+
+                        {predictionsLoading && (
+                            <View style={{ paddingVertical: 12 }}>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                            </View>
+                        )}
+
+                        {predictions.length > 0 && (
+                            <View style={{ backgroundColor: colors.background, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
+                                {predictions.slice(0, 5).map((p) => (
+                                    <TouchableOpacity
+                                        key={p.place_id}
+                                        onPress={() => selectPrediction(p)}
+                                        style={{ paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: textSecondary + '20' }}
+                                    >
+                                        <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>
+                                            {p.structured_formatting?.main_text ?? p.description}
+                                        </Text>
+                                        <Text style={{ color: textSecondary, marginTop: 2 }}>
+                                            {p.structured_formatting?.secondary_text ?? ''}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+
+                        {/* Ville et Code postal */}
+                        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+                            <View style={{ flex: 2 }}>
+                                <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Ville</Text>
+                                <TextInput
+                                    value={city}
+                                    onChangeText={setCity}
+                                    placeholder="Ville"
+                                    placeholderTextColor={textSecondary}
+                                    style={{
+                                        backgroundColor: colors.background,
+                                        borderRadius: 12,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 10,
+                                        color: colors.textPrimary,
+                                    }}
+                                />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ color: textSecondary, fontSize: 12, marginBottom: 6 }}>Code postal</Text>
+                                <TextInput
+                                    value={postalCode}
+                                    onChangeText={setPostalCode}
+                                    placeholder="00000"
+                                    placeholderTextColor={textSecondary}
+                                    keyboardType="numeric"
+                                    maxLength={5}
+                                    style={{
+                                        backgroundColor: colors.background,
+                                        borderRadius: 12,
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 10,
+                                        color: colors.textPrimary,
+                                    }}
+                                />
+                            </View>
+                        </View>
+                    </>
+                )}
 
                 <ContactSection
                     colors={colors}
-                    firstName={firstName}
-                    lastName={lastName}
+                    fullName={fullName}
                     companyName={companyName}
                     phoneNumber={phoneNumber}
                     isCompany={isCompany}
-                    onFirstNameChange={setFirstName}
-                    onLastNameChange={setLastName}
+                    onFullNameChange={setFullName}
                     onCompanyNameChange={setCompanyName}
                     onPhoneNumberChange={setPhoneNumber}
                     onIsCompanyChange={setIsCompany}
@@ -1038,6 +1163,159 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
                 onSave={handleSavePackageLocation}
                 onClear={handleClearPackageLocation}
             />
+
+            {/* Change Address Modal */}
+            <Modal
+                visible={changeAddressVisible}
+                animationType="slide"
+                presentationStyle="fullScreen"
+                onRequestClose={() => setChangeAddressVisible(false)}
+            >
+                <KeyboardAvoidingView
+                    style={{ flex: 1, backgroundColor: colors.background }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                >
+                    {/* Search Header */}
+                    <View
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: colors.surface,
+                            marginTop: Platform.OS === 'ios' ? 50 : 20,
+                            marginHorizontal: 16,
+                            borderRadius: 12,
+                            paddingHorizontal: 12,
+                            height: 48,
+                        }}
+                    >
+                        <MagnifyingGlass size={18} color={textSecondary} />
+                        <TextInput
+                            value={tempAddress}
+                            onChangeText={setTempAddress}
+                            placeholder="Saisissez du texte pour ajouter..."
+                            placeholderTextColor={textSecondary}
+                            autoFocus
+                            style={{
+                                flex: 1,
+                                color: colors.textPrimary,
+                                paddingHorizontal: 10,
+                                paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+                            }}
+                        />
+                        <TouchableOpacity
+                            onPress={handleChangeAddressScan}
+                            style={{ padding: 8 }}
+                        >
+                            <Camera size={20} color={colors.textPrimary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={handleChangeAddressVoice}
+                            style={{ padding: 8 }}
+                        >
+                            <Microphone size={20} color={colors.textPrimary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => setChangeAddressVisible(false)}
+                            style={{ padding: 8 }}
+                        >
+                            <X size={20} color={colors.textPrimary} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Predictions or Empty State */}
+                    <ScrollView style={{ flex: 1, marginTop: 16 }} contentContainerStyle={{ paddingHorizontal: 16 }}>
+                        {tempPredictionsLoading && (
+                            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                            </View>
+                        )}
+
+                        {!tempPredictionsLoading && tempPredictions.length === 0 && tempAddress.length < 3 && (
+                            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 100 }}>
+                                <View style={{ width: 60, height: 60, borderWidth: 2, borderColor: textSecondary, borderStyle: 'dashed', borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                                    <MapPin size={24} color={textSecondary} />
+                                </View>
+                                <Text style={{ color: textSecondary, fontSize: 14, textAlign: 'center' }}>
+                                    Ajoutez des arrêts ou trouvez des arrêts sur ce trajet
+                                </Text>
+                            </View>
+                        )}
+
+                        {tempPredictions.length > 0 && (
+                            <View style={{ backgroundColor: colors.surface, borderRadius: 12, overflow: 'hidden' }}>
+                                {tempPredictions.slice(0, 5).map((p) => (
+                                    <TouchableOpacity
+                                        key={p.place_id}
+                                        onPress={() => selectTempPrediction(p)}
+                                        style={{ paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.background }}
+                                    >
+                                        <Text style={{ color: colors.textPrimary, fontSize: 16, fontWeight: '600' }}>
+                                            {p.structured_formatting?.main_text ?? p.description}
+                                        </Text>
+                                        <Text style={{ color: textSecondary, fontSize: 12, marginTop: 4 }}>
+                                            {p.structured_formatting?.secondary_text ?? ''}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </ScrollView>
+
+                    {/* Bottom Action Buttons (Carte, Scanner, Voix) */}
+                    <View style={{
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                        gap: 16,
+                        padding: 16,
+                        paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+                    }}>
+                        <TouchableOpacity
+                            style={{
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: colors.surface,
+                                borderRadius: 12,
+                                paddingVertical: 16,
+                                paddingHorizontal: 24,
+                                minWidth: 90,
+                            }}
+                        >
+                            <MapPin size={24} color={colors.textPrimary} />
+                            <Text style={{ color: colors.textPrimary, fontSize: 12, marginTop: 8 }}>Carte</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={handleChangeAddressScan}
+                            style={{
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: colors.surface,
+                                borderRadius: 12,
+                                paddingVertical: 16,
+                                paddingHorizontal: 24,
+                                minWidth: 90,
+                            }}
+                        >
+                            <Camera size={24} color={colors.textPrimary} />
+                            <Text style={{ color: colors.textPrimary, fontSize: 12, marginTop: 8 }}>Scanner</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={handleChangeAddressVoice}
+                            style={{
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: colors.surface,
+                                borderRadius: 12,
+                                paddingVertical: 16,
+                                paddingHorizontal: 24,
+                                minWidth: 90,
+                            }}
+                        >
+                            <Microphone size={24} color={colors.textPrimary} />
+                            <Text style={{ color: colors.textPrimary, fontSize: 12, marginTop: 8 }}>Voix</Text>
+                        </TouchableOpacity>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </BottomSheetModal>
     );
 });
