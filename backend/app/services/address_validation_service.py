@@ -21,39 +21,93 @@ settings = get_settings()
 logger = logging.getLogger("address_validation")
 
 # =============================================================================
-# NLP MODELS: CamemBERT-NER (Distilled) + spaCy fallback
+# NLP MODELS: Lazy Loading (loads on first request, not at startup)
 # =============================================================================
 
-BERT_AVAILABLE = False
-SPACY_AVAILABLE = False
-ner_pipeline = None
-nlp = None
+class NERModelManager:
+    """
+    Lazy loader for NER models.
+    Loads models on first use, not at import time.
+    This allows uvicorn to start quickly and bind the port.
+    """
+    
+    def __init__(self):
+        self._ner_pipeline = None
+        self._nlp = None
+        self._bert_available = None
+        self._spacy_available = None
+        self._initialized = False
+    
+    def _init_models(self):
+        """Initialize models on first call (lazy loading)"""
+        if self._initialized:
+            return
+        
+        self._initialized = True
+        self._bert_available = False
+        self._spacy_available = False
+        
+        # Try CamemBERT-NER first
+        try:
+            from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification
+            
+            MODEL_NAME = "Jean-Baptiste/camembert-ner"
+            tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+            model = AutoModelForTokenClassification.from_pretrained(MODEL_NAME)
+            self._ner_pipeline = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple")
+            
+            self._bert_available = True
+            logger.info("✅ CamemBERT-NER chargé avec succès (lazy loading)")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ CamemBERT-NER non disponible: {e}")
+        
+        # Fallback to spaCy
+        if not self._bert_available:
+            try:
+                import spacy
+                self._nlp = spacy.load("fr_core_news_lg")
+                self._spacy_available = True
+                logger.info("✅ spaCy fr_core_news_lg chargé (fallback)")
+            except Exception as e:
+                logger.warning(f"⚠️ spaCy non disponible: {e}")
+    
+    @property
+    def ner_pipeline(self):
+        self._init_models()
+        return self._ner_pipeline
+    
+    @property
+    def nlp(self):
+        self._init_models()
+        return self._nlp
+    
+    @property
+    def bert_available(self):
+        self._init_models()
+        return self._bert_available
+    
+    @property
+    def spacy_available(self):
+        self._init_models()
+        return self._spacy_available
 
-# Try to load CamemBERT-NER (lightweight BERT for French NER)
-try:
-    from transformers import pipeline, AutoTokenizer, AutoModelForTokenClassification
-    
-    MODEL_NAME = "Jean-Baptiste/camembert-ner"
-    
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForTokenClassification.from_pretrained(MODEL_NAME)
-    ner_pipeline = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple")
-    
-    BERT_AVAILABLE = True
-    logger.info("✅ CamemBERT-NER chargé avec succès (modèle léger ~400MB)")
-    
-except Exception as e:
-    logger.warning(f"⚠️ CamemBERT-NER non disponible: {e}")
 
-# Fallback to spaCy standard model
-if not BERT_AVAILABLE:
-    try:
-        import spacy
-        nlp = spacy.load("fr_core_news_lg")
-        SPACY_AVAILABLE = True
-        logger.info("✅ spaCy fr_core_news_lg chargé (fallback)")
-    except Exception as e:
-        logger.warning(f"⚠️ spaCy non disponible: {e}")
+# Global singleton - models load on first use, not at import
+_model_manager = NERModelManager()
+
+# Expose as module-level for backward compatibility
+def get_ner_pipeline():
+    return _model_manager.ner_pipeline
+
+def get_nlp():
+    return _model_manager.nlp
+
+def is_bert_available():
+    return _model_manager.bert_available
+
+def is_spacy_available():
+    return _model_manager.spacy_available
 
 
 # =============================================================================
@@ -193,12 +247,13 @@ def extract_entities_bert(raw_text: str) -> ExtractedEntities:
     """
     entities = ExtractedEntities()
     
-    if not ner_pipeline:
+    pipeline = get_ner_pipeline()
+    if not pipeline:
         return extract_entities_regex(raw_text)
     
     try:
         # Run NER pipeline
-        ner_results = ner_pipeline(raw_text)
+        ner_results = pipeline(raw_text)
         
         locations = []
         has_person = False
@@ -255,11 +310,12 @@ def extract_entities_spacy(raw_text: str) -> ExtractedEntities:
     Fallback: Extract entities using spaCy standard model.
     Used when CamemBERT-NER is not available.
     """
-    if not SPACY_AVAILABLE or not nlp:
+    spacy_nlp = get_nlp()
+    if not is_spacy_available() or not spacy_nlp:
         return extract_entities_regex(raw_text)
     
     entities = ExtractedEntities()
-    doc = nlp(raw_text)
+    doc = spacy_nlp(raw_text)
     
     locations = []
     has_person = False
@@ -304,9 +360,9 @@ def extract_entities(raw_text: str) -> ExtractedEntities:
     Main entry point for entity extraction.
     Uses CamemBERT-NER if available, otherwise falls back to spaCy, then regex.
     """
-    if BERT_AVAILABLE:
+    if is_bert_available():
         return extract_entities_bert(raw_text)
-    elif SPACY_AVAILABLE:
+    elif is_spacy_available():
         return extract_entities_spacy(raw_text)
     else:
         return extract_entities_regex(raw_text)
@@ -630,8 +686,8 @@ async def validate_ocr_address(
             "is_valid": validated.is_valid,
             "confidence": validated.confidence,
             "source": validated.validation_source,
-            "spacy_used": SPACY_AVAILABLE,
-            "bert_used": BERT_AVAILABLE,
+            "spacy_used": is_spacy_available(),
+            "bert_used": is_bert_available(),
         },
         "address": {
             "street": validated.street,
