@@ -272,6 +272,8 @@ Pour toute question, consultez:
 ## Frontend
   # Acceder au dossier mobile
     cd /Volumes/Data/Works/Windsurf/DriverPro/mobile
+  # Lancer le serveur de développement
+    npx expo start
   # Lancer le projet
     npx expo run:ios --device
 
@@ -288,3 +290,19 @@ Pour toute question, consultez:
 
 ## Build iOS avec bundle embarqué (pas besoin de Metro)
     npx expo run:ios --device --configuration Release
+
+# réinstaller les podss 
+    cd /Volumes/Data/Works/Windsurf/DriverPro/mobile
+    rm -rf node_modules
+    rm -rf .expo
+    rm -rf .expo/xcodebuild.log
+
+    # réinstaller les pods
+    cd /Volumes/Data/Works/Windsurf/DriverPro/mobile
+    npm install
+    cd ios
+    pod install
+    cd ..       
+    
+
+http://192.168.1.60:8081

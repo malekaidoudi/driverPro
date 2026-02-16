@@ -216,7 +216,37 @@ function normalizeCityName(city: string): string {
   return city
     .toLowerCase()
     .replace(/\s*-\s*/g, '-')     // "SAINT - GENIS" -> "saint-genis"
-    .replace(/\s+/g, ' ')          // Multiple spaces -> single space
+    .replace(/\s+/g, '-')          // "SAINT GENIS" -> "saint-genis"
+    .replace(/-+/g, '-')           // Multiple hyphens -> single hyphen
+    .trim();
+}
+
+// Helper to normalize street number position (move number from end to start)
+// "AVENUE DU GÉNÉRAL DE GAULLE 29" -> "29 Avenue du Général de Gaulle"
+function normalizeStreetNumberPosition(street: string): string {
+  // Pattern: street name followed by number at end
+  const endNumberPattern = /^(.+?)\s+(\d{1,4}\s*(?:bis|ter|quater)?)\s*$/i;
+  const match = street.match(endNumberPattern);
+
+  if (match) {
+    const streetName = match[1].trim();
+    const streetNumber = match[2].trim();
+    // Check if streetName contains a street keyword (rue, avenue, etc.)
+    const hasStreetKeyword = STREET_KEYWORDS.some(kw =>
+      streetName.toLowerCase().includes(kw.toLowerCase())
+    );
+    if (hasStreetKeyword) {
+      return `${streetNumber} ${streetName}`;
+    }
+  }
+  return street;
+}
+
+// Helper to clean city name (remove trailing department code like "69")
+function cleanCityName(city: string): string {
+  // Remove trailing 2-digit department code: "ST GENIS LAVAL 69" -> "ST GENIS LAVAL"
+  return city
+    .replace(/\s+\d{2}\s*$/, '')
     .trim();
 }
 
@@ -331,7 +361,8 @@ function mergeBrokenTokens(text: string): string {
   return text
     .replace(/(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2})/g, '$1$2$3$4$5')
     .replace(/(\d{5})\s*-?\s*([A-Za-z])/g, '$1 $2')
-    .replace(/([A-Za-z])\s*-\s*([A-Za-z])/g, '$1-$2');
+    // Normalize city names with spaced hyphens: "SAINT - GENIS - LAVAL" -> "SAINT-GENIS-LAVAL"
+    .replace(/([A-Za-z])\s+-\s+([A-Za-z])/g, '$1-$2');
 }
 
 function normalizeText(text: string): string {
@@ -721,6 +752,8 @@ function extractPhone(context: ExtractionContext): Candidate<string>[] {
   const patterns = [
     /(?:0|\+33|0033)\s*[1-9](?:[\s.\-]?\d{2}){4}/g,
     /\b0[1-9](?:\d{2}){4}\b/g,
+    // Format "33XXXXXXXXX" (11 digits starting with 33)
+    /\b33[1-9](?:\d{2}){4}\b/g,
   ];
 
   for (const classification of context.classifications) {
@@ -729,7 +762,11 @@ function extractPhone(context: ExtractionContext): Candidate<string>[] {
         const matches = classification.content.match(pattern);
         if (matches) {
           for (const match of matches) {
-            const normalized = match.replace(/[\s.\-]/g, '').replace(/^\+33/, '0').replace(/^0033/, '0');
+            let normalized = match.replace(/[\s.\-]/g, '').replace(/^\+33/, '0').replace(/^0033/, '0');
+            // Handle "33XXXXXXXXX" format (11 digits starting with 33)
+            if (normalized.length === 11 && /^33[1-9]/.test(normalized)) {
+              normalized = '0' + normalized.slice(2);
+            }
             if (normalized.length === 10 && /^0[1-9]/.test(normalized)) {
               const exists = candidates.some(c => c.value === normalized);
               if (!exists) {
@@ -750,7 +787,11 @@ function extractPhone(context: ExtractionContext): Candidate<string>[] {
     const matches = context.fullTextNoBreaks.match(pattern);
     if (matches) {
       for (const match of matches) {
-        const normalized = match.replace(/[\s.\-]/g, '').replace(/^\+33/, '0').replace(/^0033/, '0');
+        let normalized = match.replace(/[\s.\-]/g, '').replace(/^\+33/, '0').replace(/^0033/, '0');
+        // Handle "33XXXXXXXXX" format (11 digits starting with 33)
+        if (normalized.length === 11 && /^33[1-9]/.test(normalized)) {
+          normalized = '0' + normalized.slice(2);
+        }
         if (normalized.length === 10 && /^0[1-9]/.test(normalized)) {
           const exists = candidates.some(c => c.value === normalized);
           if (!exists) {
@@ -822,8 +863,9 @@ function extractPostalCity(context: ExtractionContext): { postal: Candidate<stri
           cityScore += 0.2;
         }
 
-        // Clean city name for display (capitalize words)
-        const cleanCity = city.replace(/\s*-\s*/g, '-').split(/[\s-]+/)
+        // Clean city name: remove trailing department code and format for display
+        const cleanedCity = cleanCityName(city);
+        const cleanCity = cleanedCity.replace(/\s*-\s*/g, '-').split(/[\s-]+/)
           .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
           .join('-');
 
@@ -851,10 +893,16 @@ function extractPostalCity(context: ExtractionContext): { postal: Candidate<stri
       });
     }
 
-    const cityExists = cityCandidates.some(c => c.value.toLowerCase() === city.toLowerCase());
+    // Clean city name: remove trailing department code
+    const cleanedCity = cleanCityName(city);
+    const formattedCity = cleanedCity.replace(/\s*-\s*/g, '-').split(/[\s-]+/)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join('-');
+
+    const cityExists = cityCandidates.some(c => c.value.toLowerCase() === formattedCity.toLowerCase());
     if (!cityExists) {
       cityCandidates.push({
-        value: city,
+        value: formattedCity,
         score: 0.5,
         source: 'global',
       });
@@ -897,6 +945,9 @@ function extractStreet(context: ExtractionContext): Candidate<string>[] {
       // Remove company names before street number (ALL CAPS words before number)
       streetValue = streetValue.replace(/^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜÇ\s]{4,}\s+(?=\d)/g, '').trim();
 
+      // Normalize street number position (move from end to start if needed)
+      streetValue = normalizeStreetNumberPosition(streetValue);
+
       if (streetValue.length > 3 && streetValue.length < 60) {
         candidates.push({
           value: streetValue,
@@ -928,6 +979,8 @@ function extractStreet(context: ExtractionContext): Candidate<string>[] {
       if (/(rue|avenue|boulevard|chemin|route|place)/i.test(match)) return match;
       return '';
     });
+    // Normalize street number position (move from end to start)
+    cleaned = normalizeStreetNumberPosition(cleaned);
     return cleaned.trim();
   };
 

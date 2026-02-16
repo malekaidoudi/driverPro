@@ -266,3 +266,42 @@ export interface PlaceDetails {
     city?: string;
     postalCode?: string;
 }
+
+// OCR Validation Types
+export interface OCRValidationRequest {
+    raw_text: string;
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    company?: string;
+}
+
+export interface OCRValidationResult {
+    is_valid: boolean;
+    confidence: number;
+    source: 'google' | 'local' | 'fallback';
+}
+
+export interface OCRValidatedAddress {
+    street?: string;
+    postal_code?: string;
+    city?: string;
+    formatted?: string;
+    latitude?: number;
+    longitude?: number;
+    place_id?: string;
+}
+
+export interface OCRValidatedContact {
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    company?: string;
+}
+
+export interface OCRValidationResponse {
+    validation: OCRValidationResult;
+    address: OCRValidatedAddress;
+    contact: OCRValidatedContact;
+    raw_input: string;
+}

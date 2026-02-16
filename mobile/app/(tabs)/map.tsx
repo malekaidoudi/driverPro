@@ -11,15 +11,17 @@ import {
     KeyboardAvoidingView,
     ScrollView,
     Keyboard,
+    Modal,
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { servicesApi } from '../../src/services/api';
 import { PlacePrediction } from '../../src/types';
-import { MagnifyingGlass, Microphone, QrCode, MapPin, NavigationArrow, X, Crosshair, ArrowLeft, ArrowRight, ArrowUp, ArrowUUpLeft, ArrowUUpRight, XCircle, Camera, ClockCounterClockwise } from 'phosphor-react-native';
+import { MagnifyingGlass, Microphone, QrCode, MapPin, NavigationArrow, X, Crosshair, ArrowLeft, ArrowRight, ArrowUp, ArrowUUpLeft, ArrowUUpRight, XCircle, Camera, ClockCounterClockwise, ListBullets, SpeakerHigh, SpeakerSlash } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import { MapPressEvent } from 'react-native-maps';
+import * as Speech from 'expo-speech';
+import { MapPressEvent, LongPressEvent } from 'react-native-maps';
 
 interface NavigationStep {
     instruction: string;
@@ -48,6 +50,8 @@ export default function MapScreen() {
     const [showPredictions, setShowPredictions] = useState(false);
     const [searchHistory, setSearchHistory] = useState<{ address: string; placeId: string }[]>([]);
     const [showHistory, setShowHistory] = useState(false);
+    const debounceRef = useRef<NodeJS.Timeout | null>(null);
+    const skipAutocompleteRef = useRef(false); // Skip autocomplete after selection
 
     // Load search history on mount
     useEffect(() => {
@@ -119,43 +123,93 @@ export default function MapScreen() {
     const locationSubscription = useRef<Location.LocationSubscription | null>(null);
     const currentStepRef = useRef(0);
     const lastRerouteTime = useRef(0);
+    const [showAllSteps, setShowAllSteps] = useState(false);
+    const [voiceEnabled, setVoiceEnabled] = useState(true);
 
-    const mapRegion = useMemo(() => ({
-        latitude: destination?.latitude || userLocation.latitude,
-        longitude: destination?.longitude || userLocation.longitude,
-        latitudeDelta: destination ? 0.05 : 0.1,
-        longitudeDelta: destination ? 0.05 : 0.1,
-    }), [destination, userLocation]);
+    // Speak navigation instruction
+    const speakInstruction = useCallback((text: string) => {
+        if (!voiceEnabled) return;
+        Speech.stop();
+        Speech.speak(text, {
+            language: 'fr-FR',
+            pitch: 1.0,
+            rate: 0.9,
+        });
+    }, [voiceEnabled]);
+
+    // Static initial region - prevents MapView re-renders
+    // Use animateToRegion() for dynamic changes instead
+    const initialRegion = useMemo(() => ({
+        latitude: 45.764043, // Lyon default
+        longitude: 4.835659,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+    }), []);
+
+    // Center map on user location when loaded
+    useEffect(() => {
+        if (locationLoaded && mapRef.current) {
+            mapRef.current.animateToRegion({
+                ...userLocation,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
+            }, 500);
+        }
+    }, [locationLoaded]);
 
     // Autocomplete effect
+    const fetchPredictions = async (query: string) => {
+        try {
+            const results = await servicesApi.autocomplete(query);
+            setPredictions(results);
+        } catch {
+            setPredictions([]);
+        } finally {
+            setPredictionsLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const query = searchQuery.trim();
-        if (query.length < 3) {
+        // Skip if we just selected a prediction
+        if (skipAutocompleteRef.current) {
+            skipAutocompleteRef.current = false;
+            return;
+        }
+
+        if (!searchQuery || searchQuery.length < 3) {
             setPredictions([]);
             setShowPredictions(false);
             return;
         }
 
-        setPredictionsLoading(true);
+        // Show predictions dropdown and loading state
         setShowPredictions(true);
-        const timeout = setTimeout(async () => {
-            try {
-                const results = await servicesApi.autocomplete(query);
-                setPredictions(results);
-            } catch {
-                setPredictions([]);
-            } finally {
-                setPredictionsLoading(false);
-            }
+        setPredictionsLoading(true);
+
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+        }
+
+        debounceRef.current = setTimeout(() => {
+            fetchPredictions(searchQuery);
         }, 300);
 
-        return () => clearTimeout(timeout);
+        return () => {
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
+            }
+        };
     }, [searchQuery]);
+
 
     // Select a prediction and get directions
     const selectPrediction = useCallback(async (prediction: PlacePrediction) => {
         try {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+            // Skip autocomplete trigger when updating searchQuery
+            skipAutocompleteRef.current = true;
+
             const details = await servicesApi.getPlaceDetails(prediction.place_id);
 
             if (details?.latitude && details?.longitude) {
@@ -279,12 +333,12 @@ export default function MapScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }, []);
 
-    // Handle map press to select location
-    const handleMapPress = useCallback(async (event: MapPressEvent) => {
-        if (!selectingFromMap) return;
+    // Handle long press to select location on map
+    const handleMapLongPress = useCallback(async (event: LongPressEvent) => {
+        if (isNavigating) return; // Don't allow during navigation
 
         const { latitude, longitude } = event.nativeEvent.coordinate;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
         try {
             // Reverse geocode to get address
@@ -297,8 +351,6 @@ export default function MapScreen() {
             const dest: RoutePoint = { address, latitude, longitude };
             setDestination(dest);
             setSearchQuery(address.split(',')[0]);
-            setSelectingFromMap(false);
-
             await getDirections(userLocation, dest);
 
             mapRef.current?.fitToCoordinates(
@@ -308,14 +360,20 @@ export default function MapScreen() {
         } catch (error) {
             console.error('Error getting address:', error);
         }
-    }, [selectingFromMap, userLocation]);
+    }, [isNavigating, userLocation]);
 
     // Check if user is off route (more than 50m from nearest route point)
+    // Optimized: sample every 5th point to reduce CPU usage on large routes
     const isOffRoute = useCallback((location: { latitude: number; longitude: number }, routePoints: { latitude: number; longitude: number }[]) => {
-        if (routePoints.length === 0) return false;
+        if (routePoints.length < 2) return false;
+
+        // Sample every 5th point for performance (3000 points → 600 checks)
+        const sampleRate = Math.max(1, Math.floor(routePoints.length / 200));
         let minDistance = Infinity;
-        for (const point of routePoints) {
-            const dist = getDistanceBetweenPoints(location, point);
+
+        for (let i = 0; i < routePoints.length; i += sampleRate) {
+            const dist = getDistanceBetweenPoints(location, routePoints[i]);
+            if (dist < 30) return false; // Early exit if clearly on route
             if (dist < minDistance) minDistance = dist;
         }
         return minDistance > 50; // 50 meters threshold
@@ -336,6 +394,11 @@ export default function MapScreen() {
         setIsNavigating(true);
         setCurrentStepIndex(0);
         currentStepRef.current = 0;
+
+        // Announce first instruction
+        if (navigationSteps[0]) {
+            speakInstruction(`Navigation démarrée. ${navigationSteps[0].instruction}`);
+        }
 
         // Start tracking location
         locationSubscription.current = await Location.watchPositionAsync(
@@ -363,34 +426,55 @@ export default function MapScreen() {
                 if (isOffRoute(newLocation, routeCoordinates) && now - lastRerouteTime.current > 10000) {
                     console.log('User off route, recalculating...');
                     lastRerouteTime.current = now;
+                    speakInstruction('Recalcul de l\'itinéraire');
                     await getDirections(newLocation, destination, true);
                     return;
                 }
 
-                // Update remaining distance/time based on current position to destination
-                const remainingDist = getDistanceBetweenPoints(newLocation, { latitude: destination.latitude, longitude: destination.longitude });
-                const remainingKm = remainingDist / 1000;
-                const avgSpeedKmh = 40; // Assume average speed
-                const remainingMinutes = Math.round((remainingKm / avgSpeedKmh) * 60);
+                // Update remaining distance/time using refs to avoid re-render
+                const stepIndex = currentStepRef.current;
+                let totalRemainingMeters = 0;
+                let totalRemainingSeconds = 0;
+
+                // Sum distance and duration from current step to end
+                for (let i = stepIndex; i < navigationSteps.length; i++) {
+                    const step = navigationSteps[i];
+                    // Parse distance (e.g., "1.2 km" or "500 m")
+                    const distMatch = step.distance.match(/([\d.]+)\s*(km|m)/i);
+                    if (distMatch) {
+                        const value = parseFloat(distMatch[1]);
+                        totalRemainingMeters += distMatch[2].toLowerCase() === 'km' ? value * 1000 : value;
+                    }
+                    // Parse duration (e.g., "5 min" or "1 hour 30 mins")
+                    const minMatch = step.duration.match(/(\d+)\s*min/i);
+                    const hourMatch = step.duration.match(/(\d+)\s*h/i);
+                    if (minMatch) totalRemainingSeconds += parseInt(minMatch[1]) * 60;
+                    if (hourMatch) totalRemainingSeconds += parseInt(hourMatch[1]) * 3600;
+                }
+
+                const remainingKm = totalRemainingMeters / 1000;
+                const remainingMinutes = Math.round(totalRemainingSeconds / 60);
+
                 setRemainingInfo({
-                    distance: remainingKm < 1 ? `${Math.round(remainingDist)} m` : `${remainingKm.toFixed(1)} km`,
+                    distance: remainingKm < 1 ? `${Math.round(totalRemainingMeters)} m` : `${remainingKm.toFixed(1)} km`,
                     duration: remainingMinutes < 60 ? `${remainingMinutes} min` : `${Math.floor(remainingMinutes / 60)} h ${remainingMinutes % 60} min`,
                 });
 
-                // Check if user reached current step end location using ref for latest value
-                setNavigationSteps(currentSteps => {
-                    const stepIndex = currentStepRef.current;
-                    if (currentSteps[stepIndex]) {
-                        const stepEnd = currentSteps[stepIndex].endLocation;
-                        const distance = getDistanceBetweenPoints(newLocation, stepEnd);
-                        if (distance < 30 && stepIndex < currentSteps.length - 1) {
-                            currentStepRef.current = stepIndex + 1;
-                            setCurrentStepIndex(stepIndex + 1);
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                // Check if user reached current step end location
+                if (navigationSteps[stepIndex]) {
+                    const stepEnd = navigationSteps[stepIndex].endLocation;
+                    const distance = getDistanceBetweenPoints(newLocation, stepEnd);
+                    if (distance < 30 && stepIndex < navigationSteps.length - 1) {
+                        currentStepRef.current = stepIndex + 1;
+                        setCurrentStepIndex(stepIndex + 1);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        // Announce next step
+                        const nextStep = navigationSteps[stepIndex + 1];
+                        if (nextStep) {
+                            speakInstruction(`Dans ${nextStep.distance}, ${nextStep.instruction}`);
                         }
                     }
-                    return currentSteps;
-                });
+                }
             }
         );
     }, [destination, navigationSteps, routeCoordinates, isOffRoute]);
@@ -399,6 +483,7 @@ export default function MapScreen() {
     const stopNavigation = useCallback(() => {
         setIsNavigating(false);
         setCurrentStepIndex(0);
+        Speech.stop();
         if (locationSubscription.current) {
             locationSubscription.current.remove();
             locationSubscription.current = null;
@@ -458,26 +543,53 @@ export default function MapScreen() {
         { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#c5e8c5' }] },
         { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
     ];
+    const outerProps =
+        Platform.OS === 'ios'
+            ? { strokeColors: ['#1a0f0a'] }
+            : { strokeColor: '#1a0f0a' };
+
+    const innerProps =
+        Platform.OS === 'ios'
+            ? { strokeColors: ['#FFB500'] }
+            : { strokeColor: '#FFB500' };
+
 
     return (
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: colors.background }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
             {/* Map */}
             <MapView
                 ref={mapRef}
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                style={{ flex: 1 }}
                 provider={PROVIDER_GOOGLE}
-                region={mapRegion}
-                showsUserLocation
+                initialRegion={initialRegion}
+                showsUserLocation={false}
                 showsMyLocationButton={false}
                 customMapStyle={upsMapStyle}
-                onPress={handleMapPress}
+                onLongPress={handleMapLongPress}
             >
-                {/* User location marker */}
+                {/* User location marker - Triangle */}
                 <Marker
-                    coordinate={userLocation}
+                    coordinate={isNavigating ? currentLocation : userLocation}
                     title="Ma position"
-                    pinColor={colors.primary}
-                />
+                    anchor={{ x: 0.5, y: 0.5 }}
+                    flat={true}
+                >
+                    <View style={{
+                        backgroundColor: '#351C15',
+                        borderRadius: 20,
+                        padding: 8,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 3,
+                        elevation: 5,
+                    }}>
+                        <NavigationArrow size={24} color={colors.primary} weight="fill" />
+                    </View>
+                </Marker>
 
                 {/* Destination marker */}
                 {destination && (
@@ -492,28 +604,24 @@ export default function MapScreen() {
                 )}
 
                 {/* Route polyline - UPS premium double stroke style */}
-                {routeCoordinates.length > 0 && (
+                
+                {routeCoordinates.length > 1 && (
                     <>
-                        {/* Outer stroke - dark brown border */}
-                        <Polyline
-                            coordinates={routeCoordinates}
-                            strokeColors={["#1a0f0a"]}
-                            strokeWidth={10}
-                            lineCap="round"
-                            lineJoin="round"
-                            geodesic={true}
-                            zIndex={9}
-                        />
-                        {/* Inner stroke - UPS gold */}
-                        <Polyline
-                            coordinates={routeCoordinates}
-                            strokeColors={["#FFB500"]}
-                            strokeWidth={6}
-                            lineCap="round"
-                            lineJoin="round"
-                            geodesic={true}
-                            zIndex={10}
-                        />
+                        <>
+                            {/* Outer stroke - dark brown border */}
+                            <Polyline
+                                coordinates={routeCoordinates}
+                                {...outerProps}
+                                strokeWidth={14}
+                                zIndex={998}
+                            />
+                            <Polyline
+                                coordinates={routeCoordinates}
+                                {...innerProps}
+                                strokeWidth={8}
+                                zIndex={999}
+                            />
+                        </>
                     </>
                 )}
             </MapView>
@@ -621,38 +729,85 @@ export default function MapScreen() {
                         }}>
                             <Text style={{ color: colors.textSecondary, fontSize: 12, padding: 12, paddingBottom: 4 }}>Recherches récentes</Text>
                             <ScrollView keyboardShouldPersistTaps="handled">
-                                {searchHistory.map((item, index) => (
-                                    <TouchableOpacity
-                                        key={`${item.placeId}-${index}`}
-                                        onPress={() => {
-                                            setSearchQuery(item.address);
-                                            setShowHistory(false);
-                                        }}
-                                        style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            padding: 14,
-                                            borderBottomWidth: index < searchHistory.length - 1 ? 1 : 0,
-                                            borderBottomColor: colors.background,
-                                        }}
-                                    >
-                                        <ClockCounterClockwise size={20} color={colors.textSecondary} />
-                                        <Text style={{ color: colors.textPrimary, fontSize: 15, marginLeft: 12, flex: 1 }} numberOfLines={1}>
-                                            {item.address}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
+                                {[
+                                    ...searchHistory
+                                        .filter(item =>
+                                            item.address.toLowerCase().includes(searchQuery.toLowerCase())
+                                        )
+                                        .slice(0, 3)
+                                        .map(item => ({
+                                            type: 'history',
+                                            place_id: item.placeId,
+                                            description: item.address,
+                                        })),
+
+                                    ...predictions.slice(0, 5).map(p => ({
+                                        type: 'prediction',
+                                        ...p,
+                                    })),
+                                ].map((item: any, index) => {
+                                    const isHistory = item.type === 'history';
+
+                                    return (
+                                        <TouchableOpacity
+                                            key={`${item.place_id}-${index}`}
+                                            onPress={() => {
+                                                if (isHistory) {
+                                                    // Skip autocomplete and select directly
+                                                    skipAutocompleteRef.current = true;
+                                                    selectPrediction({
+                                                        place_id: item.place_id,
+                                                        description: item.description,
+                                                        structured_formatting: {
+                                                            main_text: item.description,
+                                                            secondary_text: '',
+                                                        },
+                                                    });
+                                                } else {
+                                                    selectPrediction(item);
+                                                }
+                                            }}
+                                            style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                padding: 14,
+                                                borderBottomWidth: 1,
+                                                borderBottomColor: colors.background,
+                                                backgroundColor: isHistory ? colors.background : colors.surface,
+                                            }}
+                                        >
+                                            {isHistory ? (
+                                                <ClockCounterClockwise size={20} color={colors.primary} />
+                                            ) : (
+                                                <MapPin size={20} color={colors.textSecondary} />
+                                            )}
+
+                                            <View style={{ marginLeft: 12, flex: 1 }}>
+                                                <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '500' }}>
+                                                    {item.structured_formatting?.main_text || item.description}
+                                                </Text>
+
+                                                {!isHistory && (
+                                                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
+                                                        {item.structured_formatting?.secondary_text || ''}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        </TouchableOpacity>
+                                    );
+                                })}
                             </ScrollView>
+
                         </View>
                     )}
 
-                    {/* Predictions dropdown - only show when no route selected */}
-                    {showPredictions && predictions.length > 0 && !destination && !showHistory && (
+                    {/* Predictions dropdown - allow new search even with destination */}
+                    {showPredictions && predictions.length > 0 && !showHistory && (
                         <View style={{
                             backgroundColor: colors.surface,
                             borderRadius: 12,
                             marginTop: 8,
-                            maxHeight: 300,
+                            maxHeight: 350,
                             shadowColor: '#000',
                             shadowOffset: { width: 0, height: 2 },
                             shadowOpacity: 0.1,
@@ -664,9 +819,42 @@ export default function MapScreen() {
                                     <ActivityIndicator size="small" color={colors.primary} />
                                 </View>
                             ) : (
-
                                 <ScrollView keyboardShouldPersistTaps="handled">
-                                    {predictions.slice(0, 5).map((prediction) => (
+                                    {/* History items matching search query */}
+                                    {searchHistory
+                                        .filter(item => item.address.toLowerCase().includes(searchQuery.toLowerCase()))
+                                        .slice(0, 3)
+                                        .map((item, index) => (
+                                            <TouchableOpacity
+                                                key={`history-${item.placeId}-${index}`}
+                                                onPress={() => {
+                                                    skipAutocompleteRef.current = true;
+                                                    selectPrediction({
+                                                        place_id: item.placeId,
+                                                        description: item.address,
+                                                        structured_formatting: {
+                                                            main_text: item.address,
+                                                            secondary_text: '',
+                                                        },
+                                                    });
+                                                }}
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    padding: 14,
+                                                    borderBottomWidth: 1,
+                                                    borderBottomColor: colors.background,
+                                                    backgroundColor: colors.background,
+                                                }}
+                                            >
+                                                <ClockCounterClockwise size={20} color={colors.primary} />
+                                                <Text style={{ color: colors.textPrimary, fontSize: 15, marginLeft: 12, flex: 1 }} numberOfLines={1}>
+                                                    {item.address}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    {/* Google predictions */}
+                                    {predictions.map((prediction) => (
                                         <TouchableOpacity
                                             key={prediction.place_id}
                                             onPress={() => selectPrediction(prediction)}
@@ -679,8 +867,9 @@ export default function MapScreen() {
                                             }}
                                         >
 
-                                            <MapPin size={20} color={colors.textSecondary} />
 
+
+                                            <MapPin size={20} color={colors.textSecondary} />
                                             <View style={{ marginLeft: 12, flex: 1 }}>
                                                 <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '500' }}>
                                                     {prediction.structured_formatting?.main_text || prediction.description}
@@ -736,9 +925,11 @@ export default function MapScreen() {
                             </View>
                         </View>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)' }}>
-                            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
-                                Étape {currentStepIndex + 1} / {navigationSteps.length}
-                            </Text>
+                            <TouchableOpacity onPress={() => setShowAllSteps(true)}>
+                                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, textDecorationLine: 'underline' }}>
+                                    Étape {currentStepIndex + 1} / {navigationSteps.length} ▼
+                                </Text>
+                            </TouchableOpacity>
                             <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>
                                 {remainingInfo?.duration || routeInfo?.duration} restant
                             </Text>
@@ -748,7 +939,7 @@ export default function MapScreen() {
                     {/* Bottom controls - Show remaining time/distance */}
                     <View style={{
                         position: 'absolute',
-                        bottom: Platform.OS === 'ios' ? 100 : 80,
+                        bottom: Platform.OS === 'ios' ? 20 : 16,
                         left: 16,
                         right: 16,
                         backgroundColor: colors.surface,
@@ -777,12 +968,31 @@ export default function MapScreen() {
                                 </View>
                             </View>
                             <TouchableOpacity
+                                onPress={() => {
+                                    setVoiceEnabled(!voiceEnabled);
+                                    if (voiceEnabled) Speech.stop();
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                }}
+                                style={{
+                                    backgroundColor: voiceEnabled ? colors.primary : colors.background,
+                                    borderRadius: 12,
+                                    padding: 12,
+                                    marginLeft: 8,
+                                }}
+                            >
+                                {voiceEnabled ? (
+                                    <SpeakerHigh size={24} color="#351C15" weight="fill" />
+                                ) : (
+                                    <SpeakerSlash size={24} color={colors.textSecondary} weight="fill" />
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
                                 onPress={stopNavigation}
                                 style={{
                                     backgroundColor: '#EF4444',
                                     borderRadius: 12,
                                     padding: 12,
-                                    marginLeft: 12,
+                                    marginLeft: 8,
                                 }}
                             >
                                 <XCircle size={24} color="#fff" weight="fill" />
@@ -796,7 +1006,7 @@ export default function MapScreen() {
             {routeInfo && destination && !isNavigating && (
                 <View style={{
                     position: 'absolute',
-                    bottom: Platform.OS === 'ios' ? 100 : 80,
+                    bottom: Platform.OS === 'ios' ? 20 : 16,
                     left: 16,
                     right: 16,
                     backgroundColor: colors.surface,
@@ -851,6 +1061,96 @@ export default function MapScreen() {
                     </TouchableOpacity>
                 </View>
             )}
-        </View>
+
+            {/* All Steps Modal */}
+            <Modal
+                visible={showAllSteps}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowAllSteps(false)}
+            >
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                    <View style={{
+                        backgroundColor: colors.surface,
+                        borderTopLeftRadius: 24,
+                        borderTopRightRadius: 24,
+                        maxHeight: '80%',
+                        paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+                    }}>
+                        {/* Header */}
+                        <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: 16,
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.background,
+                        }}>
+                            <Text style={{ color: colors.textPrimary, fontSize: 18, fontWeight: '700' }}>
+                                Toutes les étapes
+                            </Text>
+                            <TouchableOpacity onPress={() => setShowAllSteps(false)} style={{ padding: 4 }}>
+                                <X size={24} color={colors.textPrimary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Steps list */}
+                        <ScrollView style={{ padding: 16 }}>
+                            {navigationSteps.map((step, index) => (
+                                <View
+                                    key={index}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'flex-start',
+                                        padding: 12,
+                                        marginBottom: 8,
+                                        backgroundColor: index === currentStepIndex ? colors.primary + '20' : colors.background,
+                                        borderRadius: 12,
+                                        borderLeftWidth: 4,
+                                        borderLeftColor: index === currentStepIndex ? colors.primary : index < currentStepIndex ? '#4CAF50' : colors.textTertiary,
+                                    }}
+                                >
+                                    <View style={{
+                                        backgroundColor: index === currentStepIndex ? colors.primary : index < currentStepIndex ? '#4CAF50' : '#351C15',
+                                        borderRadius: 8,
+                                        padding: 8,
+                                        marginRight: 12,
+                                    }}>
+                                        {getManeuverIcon(step.maneuver)}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }} numberOfLines={2}>
+                                            {step.instruction}
+                                        </Text>
+                                        <View style={{ flexDirection: 'row', marginTop: 4, gap: 12 }}>
+                                            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                                                {step.distance}
+                                            </Text>
+                                            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                                                {step.duration}
+                                            </Text>
+                                        </View>
+                                        {index === currentStepIndex && (
+                                            <View style={{
+                                                backgroundColor: colors.primary,
+                                                borderRadius: 4,
+                                                paddingHorizontal: 8,
+                                                paddingVertical: 2,
+                                                marginTop: 6,
+                                                alignSelf: 'flex-start',
+                                            }}>
+                                                <Text style={{ color: '#351C15', fontSize: 10, fontWeight: '700' }}>
+                                                    EN COURS
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+        </KeyboardAvoidingView>
     );
 }

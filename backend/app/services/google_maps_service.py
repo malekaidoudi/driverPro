@@ -15,19 +15,38 @@ def get_gmaps_client():
 async def get_distance_matrix(
     origins: List[Tuple[float, float]], 
     destinations: List[Tuple[float, float]],
-    mode: str = "driving"
+    mode: str = "driving",
+    use_traffic: bool = True
 ) -> Dict:
+    """
+    Get distance matrix with optional real-time traffic.
+    
+    Args:
+        origins: List of (lat, lng) tuples
+        destinations: List of (lat, lng) tuples  
+        mode: Travel mode (driving, walking, bicycling, transit)
+        use_traffic: If True, uses real-time traffic data (driving only)
+    """
     gmaps = get_gmaps_client()
+    
+    import datetime
+    
+    kwargs = {
+        "origins": origins,
+        "destinations": destinations,
+        "mode": mode,
+        "units": "metric"
+    }
+    
+    # Add traffic parameters for driving mode
+    if use_traffic and mode == "driving":
+        kwargs["departure_time"] = datetime.datetime.now()
+        kwargs["traffic_model"] = "best_guess"
     
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
         None,
-        lambda: gmaps.distance_matrix(
-            origins=origins,
-            destinations=destinations,
-            mode=mode,
-            units="metric"
-        )
+        lambda: gmaps.distance_matrix(**kwargs)
     )
     
     return result

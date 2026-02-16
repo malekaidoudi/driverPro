@@ -10,8 +10,12 @@ import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { warmupBackend } from '../src/services/api';
+import { useKeepAwake } from 'expo-keep-awake';
 
 function RootLayoutContent() {
+    // Keep screen awake while app is open
+    useKeepAwake();
+
     // Warm up backend on app start (handles Render cold start)
     useEffect(() => {
         warmupBackend();

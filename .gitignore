@@ -64,4 +64,5 @@ coverage/
 *.mobileprovision
 *.orig.*
 #Perso
-etapes.txt
+etapes.txtvenv/
+venv311/

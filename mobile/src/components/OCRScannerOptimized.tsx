@@ -51,12 +51,15 @@ import {
 } from '../hooks/useOCRParsing';
 import { parseAsync, cancelAllJobs } from '../workers/parserWorker';
 import {
-    useROITracker,
+    useSpokeROI,
     ocrResultToTextBlocks,
     scaleROIToScreen,
+    getStaticROIScreen,
     BoundingBox,
-} from '../hooks/useROITracker';
+} from '../hooks/useSpokeROI';
 import { logOCRTest } from '../services/ocrTestLogger';
+import { ocrLogger } from '../services/ocrLogger';
+import { useAddressValidation, ValidationStatus } from '../hooks/useAddressValidation';
 
 // Worker parsing state
 let parsingInProgress = false;
@@ -67,11 +70,12 @@ let parsingInProgress = false;
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ROI (Region of Interest) - Fallback values for initial/no-detection state
-const ROI_WIDTH = SCREEN_WIDTH * 0.9;
-const ROI_HEIGHT = Math.round(SCREEN_HEIGHT * 0.3);
-const ROI_TOP = Math.round(SCREEN_HEIGHT * 0.3);
-const ROI_LEFT = (SCREEN_WIDTH - ROI_WIDTH) / 2;
+// ROI UX - valeurs identiques à SEARCH_ROI_CONFIG dans useSpokeROI.ts
+// Phase SEARCH: grande zone pour scanner large
+const SEARCH_ROI_WIDTH = Math.round(SCREEN_WIDTH * 0.90);
+const SEARCH_ROI_HEIGHT = Math.round(SCREEN_HEIGHT * 0.40);
+const SEARCH_ROI_TOP = Math.round(SCREEN_HEIGHT * 0.30);
+const SEARCH_ROI_LEFT = Math.round(SCREEN_WIDTH * 0.05);
 
 // Dynamic ROI config
 // Using react-native-vision-camera-text-recognition (ML Kit) which supports bounding boxes
@@ -89,13 +93,13 @@ const DEBOUNCE_MS = 150;               // Debounce OCR calls
 const FRAME_SKIP_INTERVAL = 3;         // Process 1 frame out of 3 (÷3 CPU)
 const ROI_CONFIDENCE_THRESHOLD = 0.4;  // Min ROI confidence to trigger OCR (lowered for better detection)
 const PARSE_CONFIDENCE_THRESHOLD = 0.75; // Min parsing confidence to accept
-const FUZZY_MATCH_THRESHOLD = 0.85;    // Similarity threshold for stability
+const FUZZY_MATCH_THRESHOLD = 0.70;    // Similarity threshold for stability (lowered for OCR variance)
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-type ScannerState = 'ready' | 'processing' | 'validated';
+type ScannerState = 'ready' | 'scanning' | 'validating' | 'validated' | 'error';
 
 type Props = {
     isVisible: boolean;
@@ -137,6 +141,9 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const [editLastName, setEditLastName] = useState('');
     const [editPhone, setEditPhone] = useState('');
 
+    // NEW: Show edit overlay (Modifier Arrêt)
+    const [showEditOverlay, setShowEditOverlay] = useState(false);
+
     // Refs (no re-renders)
     const lastResultRef = useRef<ParsedOCRData | null>(null);
     const stabilityCountRef = useRef(0);
@@ -150,23 +157,54 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const roiStableRef = useRef(false);
     const lastOCRTextRef = useRef<string>(''); // For memoization
 
+    // PRIORITÉ 3: Autofocus - track last focus time to avoid spam
+    const lastFocusTimeRef = useRef(0);
+    const AUTOFOCUS_COOLDOWN_MS = 1500; // Focus max once per 1.5s
+
+    // PRIORITÉ 1: ROI bounds for filtering (in frame coordinates)
+    const roiFrameBoundsRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+
     // Auto-exposure for faded labels
     const lowQualityFrameCount = useRef(0);
     const exposureBoostApplied = useRef(false);
 
-    // Dynamic ROI Tracker
-    const { updateROI, reset: resetROI } = useROITracker();
-    const [dynamicROI, setDynamicROI] = useState<BoundingBox | null>(null);
-    const [roiIsStable, setRoiIsStable] = useState(false);
+    // Spoke-style ROI: ROI fixe UX + filtrage OCR + bounding box texte
+    const { processOCR, setTapPoint, reset: resetROI } = useSpokeROI();
+
+    // Hybrid OCR Workflow: Backend validation with debounce + cache
+    const {
+        status: validationStatus,
+        rawText: validationRawText,
+        localParsed: validationLocalParsed,
+        validatedData,
+        error: validationError,
+        isNetworkError,
+        updateLocalParsing,
+        validateWithBackend,
+        getBestAddress,
+        getBestContact,
+        acceptLocalParsing,
+        reset: resetValidation,
+    } = useAddressValidation();
+
+    // Store last frame dimensions for tap->frame coordinate conversion
+    const lastFrameDimensionsRef = useRef<{ width: number; height: number }>({ width: 1280, height: 720 });
+
+    // ROI UX fixe (ne bouge jamais) - calculé une seule fois en screen coords
+    const [staticROI] = useState<BoundingBox>(() => getStaticROIScreen(SCREEN_WIDTH, SCREEN_HEIGHT));
+    // Bounding box du texte détecté (dynamique) - en screen coords  
+    const [textBoundingBox, setTextBoundingBox] = useState<BoundingBox | null>(null);
+    // Texte détecté dans le ROI
+    const [roiHasText, setRoiHasText] = useState(false);
 
     // OCR Plugin (ML Kit with bounding boxes)
     const { scanText } = useTextRecognition({ language: 'latin' });
 
     // Animated ROI values
-    const roiX = useSharedValue(ROI_LEFT);
-    const roiY = useSharedValue(ROI_TOP);
-    const roiWidth = useSharedValue(ROI_WIDTH);
-    const roiHeight = useSharedValue(ROI_HEIGHT);
+    const roiX = useSharedValue(SEARCH_ROI_LEFT);
+    const roiY = useSharedValue(SEARCH_ROI_TOP);
+    const roiWidth = useSharedValue(SEARCH_ROI_WIDTH);
+    const roiHeight = useSharedValue(SEARCH_ROI_HEIGHT);
     const roiStable = useSharedValue(0); // 0 = unstable, 1 = stable
 
     // Request permission on mount
@@ -186,6 +224,13 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const handleOCRResult = useCallback(async (text: string) => {
         // Skip if already validated
         if (isValidatedRef.current) return;
+
+        // =====================================================================
+        // PRIORITÉ 2: Skip if ROI is not stable (prevents processing while moving)
+        // =====================================================================
+        if (!roiStableRef.current) {
+            return; // ROI not stable yet
+        }
 
         // =====================================================================
         // OPTIMIZATION 6: Worker - Skip if parsing already in progress
@@ -234,8 +279,8 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             return;
         }
 
-        setScannerState('processing');
-        setGuidanceMessage('Analyse...');
+        setScannerState('scanning');
+        setGuidanceMessage('Analyse locale...');
 
         // =====================================================================
         // OPTIMIZATION 6: Worker - Parse OCR text off UI thread
@@ -258,16 +303,18 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
         // OPTIMIZATION 4: Confidence Gating - Reject low confidence results
         // =====================================================================
         if (parsed.confidence < PARSE_CONFIDENCE_THRESHOLD) {
-            setGuidanceMessage(`Confiance faible (${Math.round(parsed.confidence * 100)}%)`);
-            setScannerState('ready');
+            if (!isValidatedRef.current) {
+                setGuidanceMessage(`Confiance faible (${Math.round(parsed.confidence * 100)}%)`);
+                setScannerState('ready');
 
-            // AUTO-EXPOSURE: Detect faded labels and boost exposure
-            lowQualityFrameCount.current++;
-            if (lowQualityFrameCount.current >= 8 && !exposureBoostApplied.current) {
-                // Many low quality frames - likely a faded label, boost exposure
-                exposureBoostApplied.current = true;
-                setExposure(0.5); // Increase brightness
-                setGuidanceMessage('📸 Contraste augmenté...');
+                // AUTO-EXPOSURE: Detect faded labels and boost exposure
+                lowQualityFrameCount.current++;
+                if (lowQualityFrameCount.current >= 8 && !exposureBoostApplied.current) {
+                    // Many low quality frames - likely a faded label, boost exposure
+                    exposureBoostApplied.current = true;
+                    setExposure(0.5); // Increase brightness
+                    setGuidanceMessage('📸 Contraste augmenté...');
+                }
             }
 
             return; // Skip - parsing confidence too low
@@ -287,138 +334,188 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             `📊 Confiance: ${Math.round(parsed.confidence * 100)}%`
         );
 
-        // Early exit: no valid address
+        // Early exit: no valid address (but don't overwrite validated state)
         if (!hasValidAddress(parsed)) {
             lastResultRef.current = null;
             stabilityCountRef.current = 0;
-            setGuidanceMessage('Adresse non détectée');
-            setScannerState('ready');
+            if (!isValidatedRef.current) {
+                setGuidanceMessage('Adresse non détectée');
+                setScannerState('ready');
+            }
             return;
         }
 
         // =====================================================================
-        // OPTIMIZATION 5: Stabilisation Renforcée - 3 frames + fuzzy 85%
+        // PHASE 1 (FLASH): Update local parsing immediately for live display
         // =====================================================================
-        if (lastResultRef.current && areResultsSimilar(lastResultRef.current, parsed, FUZZY_MATCH_THRESHOLD)) {
-            stabilityCountRef.current += 1;
-        } else {
-            stabilityCountRef.current = 1;
-        }
-        lastResultRef.current = parsed;
+        ocrLogger.logOCRDetection(text, text.split('\n').length);
+        ocrLogger.logParsing(parsed);
+        updateLocalParsing(text, parsed);
 
-        // Validated: N similar consecutive results (STABILITY_THRESHOLD = 3)
-        if (stabilityCountRef.current >= STABILITY_THRESHOLD) {
-            // Rapid mode: show confirmation overlay instead of auto-adding
-            if (rapidMode && onRapidAdd) {
-                // Prevent duplicate scans during cooldown
-                if (rapidCooldownRef.current) return;
-                rapidCooldownRef.current = true;
+        // =====================================================================
+        // TRIGGER BACKEND: Appel dès confiance >= 0.4 (pas de stabilisation)
+        // =====================================================================
+        const BACKEND_CONFIDENCE_THRESHOLD = 0.3;
 
-                setScannerState('validated');
-                setGuidanceMessage('✓ Détecté! Vérifiez les infos');
+        if (parsed.confidence >= BACKEND_CONFIDENCE_THRESHOLD) {
+            // Prevent duplicate validations
+            if (rapidCooldownRef.current) return;
+            rapidCooldownRef.current = true;
 
-                // Strong haptic feedback
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // =====================================================================
+            // PHASE 2 (VALIDATION): Send to backend for Google Address Validation
+            // =====================================================================
+            ocrLogger.startWorkflow();
+            setScannerState('validating');
+            setGuidanceMessage('🔍 Validation en cours...');
 
-                // Populate editable fields with parsed data
-                setEditStreet(parsed.street || '');
-                setEditPostalCode(parsed.postalCode || '');
-                setEditCity(parsed.city || '');
-                setEditFirstName(parsed.firstName || '');
-                setEditLastName(parsed.lastName || '');
-                setEditPhone(parsed.phoneNumber || '');
+            // Trigger backend validation (debounced + cached)
+            validateWithBackend(text, parsed).then((validatedResponse) => {
+                // Check if still validating (not reset)
+                if (isValidatedRef.current) return;
 
-                // Show confirmation overlay
-                setPendingData(parsed);
-            } else {
-                // Normal mode: close after detection
-                isValidatedRef.current = true;
-                setScannerState('validated');
-                setGuidanceMessage('✓ Détecté!');
+                if (validatedResponse?.validation.is_valid) {
+                    // =====================================================================
+                    // PHASE 3 (SYNC): Update UI with validated data
+                    // =====================================================================
+                    isValidatedRef.current = true;
+                    setScannerState('validated');
+                    setGuidanceMessage('✓ Adresse validée!');
 
-                // Haptic feedback
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    // Strong haptic feedback
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    ocrLogger.endWorkflow(true);
 
-                // Log the OCR result for debugging
-                logOCRTest(
-                    text, // Raw OCR text
-                    {
-                        street: parsed.street,
-                        postalCode: parsed.postalCode,
-                        city: parsed.city,
-                        firstName: parsed.firstName,
-                        lastName: parsed.lastName,
-                        phone: parsed.phoneNumber,
+                    // Use validated data from backend
+                    const finalData: ParsedOCRData = {
+                        ...parsed,
+                        street: validatedResponse.address.street || parsed.street,
+                        postalCode: validatedResponse.address.postal_code || parsed.postalCode,
+                        city: validatedResponse.address.city || parsed.city,
+                        confidence: validatedResponse.validation.confidence,
+                    };
+
+                    if (rapidMode && onRapidAdd) {
+                        // Populate editable fields
+                        setEditStreet(finalData.street || '');
+                        setEditPostalCode(finalData.postalCode || '');
+                        setEditCity(finalData.city || '');
+                        setEditFirstName(finalData.firstName || '');
+                        setEditLastName(finalData.lastName || '');
+                        setEditPhone(finalData.phoneNumber || '');
+                        setPendingData(finalData);
+                    } else {
+                        // Log and callback
+                        logOCRTest(text, {
+                            street: finalData.street,
+                            postalCode: finalData.postalCode,
+                            city: finalData.city,
+                            firstName: finalData.firstName,
+                            lastName: finalData.lastName,
+                            phone: finalData.phoneNumber,
+                        }).catch(e => console.warn('[OCR-LOG] Failed:', e));
+                        onDetected(finalData);
                     }
-                ).catch(e => console.warn('[OCR-LOG] Failed:', e));
+                } else {
+                    // Backend validation failed or low confidence - show error state
+                    // But only if we haven't already validated successfully
+                    if (!isValidatedRef.current) {
+                        ocrLogger.endWorkflow(false);
+                        setScannerState('error');
+                        setGuidanceMessage('⚠️ Validation échouée');
+                        rapidCooldownRef.current = false;
 
-                // Callback
-                onDetected(parsed);
-            }
-        } else {
-            setGuidanceMessage('Confirmation...');
-            setScannerState('ready');
+                        // Allow manual fallback after 2 seconds
+                        setTimeout(() => {
+                            if (!isValidatedRef.current) {
+                                setScannerState('ready');
+                                setGuidanceMessage('Réessayez ou validez manuellement');
+                            }
+                        }, 2000);
+                    }
+                }
+            }).catch(() => {
+                // Network error - allow manual fallback
+                // But only if we haven't already validated successfully
+                if (!isValidatedRef.current) {
+                    ocrLogger.endWorkflow(false);
+                    setScannerState('error');
+                    setGuidanceMessage('📶 Connexion impossible');
+                    rapidCooldownRef.current = false;
+                }
+            });
+        } else if (!isValidatedRef.current) {
+            // Confiance trop basse, continuer à scanner (sauf si déjà validé)
+            setGuidanceMessage(`Confiance: ${Math.round(parsed.confidence * 100)}% (min 30%)`);
         }
-    }, [onDetected, rapidMode, onRapidAdd]);
+    }, [onDetected, rapidMode, onRapidAdd, updateLocalParsing, validateWithBackend]);
 
     // Create worklet-compatible callback
     const handleOCRResultWorklet = Worklets.createRunOnJS(handleOCRResult);
 
     // ========================================================================
-    // DYNAMIC ROI UPDATE HANDLER
+    // SPOKE-STYLE OCR PROCESSING (ROI fixe + filtrage + textBox dynamique)
     // ========================================================================
-    const handleROIUpdate = useCallback((ocrResult: any, frameWidth: number, frameHeight: number) => {
-        if (!DYNAMIC_ROI_ENABLED) return;
-
+    const handleSpokeOCR = useCallback((ocrResult: any, frameWidth: number, frameHeight: number) => {
         const textBlocks = ocrResultToTextBlocks(ocrResult);
 
-        if (ROI_DEBUG && textBlocks.length > 0) {
-            console.log(`[ROI] Blocks: ${textBlocks.length}, Frame: ${frameWidth}x${frameHeight}, Screen: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}`);
-        }
+        // Store frame dimensions for tap coordinate conversion
+        lastFrameDimensionsRef.current = { width: frameWidth, height: frameHeight };
 
-        const roiState = updateROI(textBlocks, frameWidth, frameHeight);
+        // Process OCR avec l'architecture Spoke
+        const result = processOCR(textBlocks, frameWidth, frameHeight);
 
-        if (roiState.roi) {
-            // Scale from frame coords to screen coords
-            const screenROI = scaleROIToScreen(
-                roiState.roi,
+        // ROI UX fixe est déjà calculé en screen coords (staticROI)
+        // Pas de conversion nécessaire - il est FIXE
+
+        // Mettre à jour la bounding box du texte (affichée SEULEMENT si texte stable)
+        if (result.textBox) {
+            const screenTextBox = scaleROIToScreen(
+                result.textBox,  // Box calculée seulement quand texte stable
                 frameWidth,
                 frameHeight,
                 SCREEN_WIDTH,
-                SCREEN_HEIGHT,
-                'portrait'
+                SCREEN_HEIGHT
             );
+            setTextBoundingBox(screenTextBox);
+            setRoiHasText(true);
+
+            // Indiquer visuellement si le texte est stable
+            roiStable.value = withTiming(result.isTextStable ? 1 : 0.5, { duration: 200 });
+
+            // Store ROI frame bounds for reference
+            roiFrameBoundsRef.current = result.roi;
+            roiConfidenceRef.current = result.filteredBlocks.length / Math.max(textBlocks.length, 1);
+            roiStableRef.current = result.isTextStable;
 
             if (ROI_DEBUG) {
-                console.log(`[ROI] Frame ROI: x=${Math.round(roiState.roi.x)}, y=${Math.round(roiState.roi.y)}, w=${Math.round(roiState.roi.width)}, h=${Math.round(roiState.roi.height)}`);
-                console.log(`[ROI] Screen ROI: x=${screenROI.x}, y=${screenROI.y}, w=${screenROI.width}, h=${screenROI.height}, stable=${roiState.isStable}`);
+                console.log(`[SPOKE] ${result.filteredBlocks.length} blocks, stable=${result.isTextStable} (${result.stabilityCount}/4)`);
             }
-
-            setDynamicROI(screenROI);
-            setRoiIsStable(roiState.isStable);
-
-            // OPTIMIZATION: Store ROI state in refs for lazy OCR
-            roiConfidenceRef.current = roiState.confidence;
-            roiStableRef.current = roiState.isStable;
-
-            // Update animated values with spring animation
-            roiX.value = withSpring(screenROI.x, ROI_SPRING_CONFIG);
-            roiY.value = withSpring(screenROI.y, ROI_SPRING_CONFIG);
-            roiWidth.value = withSpring(screenROI.width, ROI_SPRING_CONFIG);
-            roiHeight.value = withSpring(screenROI.height, ROI_SPRING_CONFIG);
-            roiStable.value = withTiming(roiState.isStable ? 1 : 0, { duration: 200 });
+        } else {
+            setTextBoundingBox(null);
+            setRoiHasText(false);
+            roiStable.value = withTiming(0, { duration: 200 });
+            roiStableRef.current = false;
         }
-    }, [updateROI, roiX, roiY, roiWidth, roiHeight, roiStable]);
 
-    const handleROIUpdateWorklet = Worklets.createRunOnJS(handleROIUpdate);
-
-    // Debug logging for OCR results
-    const logOCRDebug = useCallback((message: string) => {
-        if (ROI_DEBUG) {
-            console.log(message);
+        // Autofocus at ROI center
+        if (result.detected && cameraRef.current) {
+            const now = Date.now();
+            if (now - lastFocusTimeRef.current > AUTOFOCUS_COOLDOWN_MS) {
+                lastFocusTimeRef.current = now;
+                const focusX = staticROI.x + staticROI.width / 2;
+                const focusY = staticROI.y + staticROI.height / 2;
+                cameraRef.current.focus({ x: focusX, y: focusY }).catch(() => { });
+            }
         }
-    }, []);
-    const logOCRDebugWorklet = Worklets.createRunOnJS(logOCRDebug);
+
+        // Envoyer le texte filtré au parser
+        if (result.filteredText.length > 0) {
+            handleOCRResult(result.filteredText);
+        }
+    }, [processOCR, staticROI, roiStable, handleOCRResult]);
+
+    const handleSpokeOCRWorklet = Worklets.createRunOnJS(handleSpokeOCR);
 
     // ========================================================================
     // FRAME PROCESSOR (Worklet Thread - runs on every frame)
@@ -426,25 +523,15 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
     const frameProcessor = useFrameProcessor((frame) => {
         'worklet';
 
-        // Run ML Kit OCR on frame (lightweight, needed for ROI tracking)
+        // Run ML Kit OCR on frame (OCR GLOBAL - sur toute l'image)
         const results = scanText(frame);
 
         // ML Kit returns object: { resultText: string, blocks: [...] }
         if (results && typeof results === 'object') {
-            const fullText = (results as any).resultText || '';
-            const blocks = (results as any).blocks;
-
-            // ALWAYS update ROI first (needed for stability tracking)
-            if (DYNAMIC_ROI_ENABLED && blocks) {
-                handleROIUpdateWorklet(results, frame.width, frame.height);
-            }
-
-            // Pass text to JS thread for processing (frame skip logic is there)
-            if (fullText.length > 0) {
-                handleOCRResultWorklet(fullText);
-            }
+            // Pass entire OCR result to Spoke handler (filtering happens on JS side)
+            handleSpokeOCRWorklet(results, frame.width, frame.height);
         }
-    }, [scanText, handleOCRResultWorklet, handleROIUpdateWorklet]);
+    }, [scanText, handleSpokeOCRWorklet]);
 
     // ========================================================================
     // ANIMATED ROI STYLE
@@ -458,16 +545,12 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             height: roiHeight.value,
             borderWidth: 3,
             borderRadius: 12,
-            borderColor: interpolateColor(
-                roiStable.value,
-                [0, 1],
-                ['#FFAA00', '#00FF00']
-            ),
+            borderColor: '#644117', // UPS Brown (secondary)
         };
     });
 
     // ========================================================================
-    // TAP TO MOVE ROI + FOCUS
+    // TAP TO SELECT CLUSTER + FOCUS
     // ========================================================================
     const handleTapToMoveROI = useCallback((x: number, y: number) => {
         // Focus camera at tap point
@@ -475,28 +558,26 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
             cameraRef.current.focus({ x, y });
         }
 
-        // Move ROI to center on tap point with animation
-        const newRoiWidth = ROI_WIDTH;
-        const newRoiHeight = ROI_HEIGHT;
+        // Convert screen coordinates to frame coordinates
+        // Frame is landscape (1280x720), screen is portrait
+        const frameW = lastFrameDimensionsRef.current.width;
+        const frameH = lastFrameDimensionsRef.current.height;
 
-        // Calculate new position (center ROI on tap point)
-        let newX = x - newRoiWidth / 2;
-        let newY = y - newRoiHeight / 2;
+        // Screen to frame coordinate conversion (portrait screen, landscape frame)
+        // In portrait mode with landscape frame, we need to rotate
+        const scaleX = frameH / SCREEN_WIDTH;  // Frame height maps to screen width
+        const scaleY = frameW / SCREEN_HEIGHT; // Frame width maps to screen height
 
-        // Clamp to screen bounds with padding
-        const padding = 20;
-        newX = Math.max(padding, Math.min(SCREEN_WIDTH - newRoiWidth - padding, newX));
-        newY = Math.max(padding + 60, Math.min(SCREEN_HEIGHT - newRoiHeight - padding - 150, newY));
+        const frameX = y * scaleY;                    // Screen Y -> Frame X
+        const frameY = (SCREEN_WIDTH - x) * scaleX;  // Screen X -> Frame Y (inverted)
 
-        // Animate ROI to new position
-        roiX.value = withSpring(newX, ROI_SPRING_CONFIG);
-        roiY.value = withSpring(newY, ROI_SPRING_CONFIG);
-        roiWidth.value = withSpring(newRoiWidth, ROI_SPRING_CONFIG);
-        roiHeight.value = withSpring(newRoiHeight, ROI_SPRING_CONFIG);
+        // Tell ROI tracker to prioritize blocks near this tap point
+        setTapPoint(frameX, frameY);
 
-        // Reset stability for new area
+        // Reset stability for new selection
         roiStable.value = 0;
-        setRoiIsStable(false);
+        setRoiHasText(false);
+        setTextBoundingBox(null);
         lastResultRef.current = null;
         stabilityCountRef.current = 0;
 
@@ -504,13 +585,17 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         // Update guidance
-        setGuidanceMessage('Zone de scan déplacée');
+        setGuidanceMessage('Cluster sélectionné');
         setTimeout(() => {
             if (scannerState === 'ready') {
                 setGuidanceMessage('Visez une étiquette...');
             }
         }, 1000);
-    }, [roiX, roiY, roiWidth, roiHeight, roiStable, scannerState]);
+
+        if (ROI_DEBUG) {
+            console.log(`[TAP] Screen (${Math.round(x)}, ${Math.round(y)}) -> Frame (${Math.round(frameX)}, ${Math.round(frameY)})`);
+        }
+    }, [roiStable, scannerState, setTapPoint]);
 
     // ========================================================================
     // RESET on visibility change
@@ -540,22 +625,20 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 setRapidScanCount(0);
                 setRapidLastAddress('');
             }
-            // Reset dynamic ROI
+            // Reset Spoke ROI (stabilisation uniquement, ROI UX reste fixe)
             resetROI();
-            setDynamicROI(null);
-            setRoiIsStable(false);
-            // Reset to default position
-            roiX.value = ROI_LEFT;
-            roiY.value = ROI_TOP;
-            roiWidth.value = ROI_WIDTH;
-            roiHeight.value = ROI_HEIGHT;
+            // Reset hybrid validation workflow
+            resetValidation();
+            setTextBoundingBox(null);
+            setRoiHasText(false);
             roiStable.value = 0;
         } else {
             // Scanner closing - cancel pending jobs
             cancelAllJobs();
             parsingInProgress = false;
+            resetValidation();
         }
-    }, [isVisible, rapidMode, resetROI, roiX, roiY, roiWidth, roiHeight, roiStable]);
+    }, [isVisible, rapidMode, resetROI, resetValidation, roiStable]);
 
     // ========================================================================
     // CONFIRMATION OVERLAY HANDLERS
@@ -678,29 +761,46 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                         <View style={[styles.corner, styles.cornerTR]} />
                         <View style={[styles.corner, styles.cornerBL]} />
                         <View style={[styles.corner, styles.cornerBR]} />
-                        {/* Stability indicator */}
-                        {roiIsStable && (
+                        {/* Text detected indicator */}
+                        {roiHasText && (
                             <View style={styles.stableIndicator}>
                                 <Text style={styles.stableText}>✓</Text>
                             </View>
                         )}
                     </Animated.View>
-                ) : (
+                ) : null}
+
+                {/* Bounding box du texte détecté (rectangle vert dynamique) */}
+                {textBoundingBox && (
+                    <View
+                        style={[
+                            styles.textBoundingBox,
+                            {
+                                left: textBoundingBox.x,
+                                top: textBoundingBox.y,
+                                width: textBoundingBox.width,
+                                height: textBoundingBox.height,
+                            }
+                        ]}
+                    />
+                )}
+
+                {!DYNAMIC_ROI_ENABLED && (
                     /* Fallback: Static ROI */
                     <>
-                        <View style={[styles.darkArea, { height: ROI_TOP }]} />
+                        <View style={[styles.darkArea, { height: SEARCH_ROI_TOP }]} />
                         <View style={styles.roiRow}>
-                            <View style={[styles.darkArea, { width: ROI_LEFT }]} />
+                            <View style={[styles.darkArea, { width: SEARCH_ROI_LEFT }]} />
                             <View style={[
                                 styles.roi,
                                 {
-                                    width: ROI_WIDTH,
-                                    height: ROI_HEIGHT,
+                                    width: SEARCH_ROI_WIDTH,
+                                    height: SEARCH_ROI_HEIGHT,
                                     borderColor: scannerState === 'validated' ? '#00FF00' :
-                                        scannerState === 'processing' ? '#FFA500' : '#FFFFFF',
+                                        (scannerState === 'scanning' || scannerState === 'validating') ? '#FFA500' : '#FFFFFF',
                                 }
                             ]} />
-                            <View style={[styles.darkArea, { width: ROI_LEFT }]} />
+                            <View style={[styles.darkArea, { width: SEARCH_ROI_LEFT }]} />
                         </View>
                         <View style={[styles.darkArea, { flex: 1 }]} />
                     </>
@@ -752,17 +852,123 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 </View>
             )}
 
-            {/* DEBUG: Raw OCR text overlay */}
-            <View style={styles.debugContainer}>
-                <Text style={styles.debugTitle}>🔍 RAW OCR:</Text>
-                <Text style={styles.debugText} numberOfLines={4}>
-                    {debugText || '(aucun texte)'}
-                </Text>
-                <Text style={[styles.debugTitle, { marginTop: 6 }]}>📝 PARSED:</Text>
-                <Text style={[styles.debugText, { color: '#00FFFF' }]} numberOfLines={6}>
-                    {debugParsed || '(rien extrait)'}
-                </Text>
-            </View>
+            {/* Result Overlay - Shown after backend validation */}
+            {(validationStatus === 'validated' || validationStatus === 'error') && validationLocalParsed && !showEditOverlay && (
+                <View style={styles.resultOverlay}>
+                    <View style={styles.resultCard}>
+                        {/* Status Badge */}
+                        <View style={[
+                            styles.resultStatusBadge,
+                            validationStatus === 'validated' ? styles.resultStatusSuccess : styles.resultStatusError
+                        ]}>
+                            <Text style={styles.resultStatusText}>
+                                {validationStatus === 'validated' ? '✓ Adresse validée' : '⚠️ Validation manuelle'}
+                            </Text>
+                        </View>
+
+                        {/* Address Details */}
+                        <View style={styles.resultDetails}>
+                            <View style={styles.resultRow}>
+                                <MapPin size={18} color="#FF6B00" weight="fill" />
+                                <Text style={styles.resultText} numberOfLines={2}>
+                                    {validationLocalParsed.street || 'Adresse non détectée'}
+                                </Text>
+                            </View>
+                            <View style={styles.resultRow}>
+                                <Buildings size={18} color="#FF6B00" weight="fill" />
+                                <Text style={styles.resultText}>
+                                    {validationLocalParsed.postalCode || ''} {validationLocalParsed.city || ''}
+                                </Text>
+                            </View>
+                            {validationLocalParsed.phoneNumber && (
+                                <View style={styles.resultRow}>
+                                    <Phone size={18} color="#4CAF50" weight="fill" />
+                                    <Text style={[styles.resultText, styles.resultPhone]}>
+                                        {validationLocalParsed.phoneNumber}
+                                    </Text>
+                                </View>
+                            )}
+                            {(validationLocalParsed.firstName || validationLocalParsed.lastName) && (
+                                <View style={styles.resultRow}>
+                                    <User size={18} color="#666" weight="fill" />
+                                    <Text style={styles.resultText}>
+                                        {`${validationLocalParsed.firstName || ''} ${validationLocalParsed.lastName || ''}`.trim()}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+
+                        {/* Action Buttons */}
+                        <View style={styles.resultActions}>
+                            <TouchableOpacity
+                                style={styles.editButton}
+                                onPress={() => {
+                                    // Populate edit fields and show edit overlay
+                                    setEditStreet(validationLocalParsed.street || '');
+                                    setEditPostalCode(validationLocalParsed.postalCode || '');
+                                    setEditCity(validationLocalParsed.city || '');
+                                    setEditFirstName(validationLocalParsed.firstName || '');
+                                    setEditLastName(validationLocalParsed.lastName || '');
+                                    setEditPhone(validationLocalParsed.phoneNumber || '');
+                                    setShowEditOverlay(true);
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                }}
+                            >
+                                <PencilSimple size={20} color="#FFF" weight="bold" />
+                                <Text style={styles.editButtonText}>Modifier</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.addButton}
+                                disabled={isAdding}
+                                onPress={() => {
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+                                    // Callback avec les données
+                                    if (rapidMode && onRapidAdd) {
+                                        setIsAdding(true);
+                                        onRapidAdd(validationLocalParsed).then(() => {
+                                            setRapidScanCount(c => c + 1);
+                                            setRapidLastAddress(`${validationLocalParsed.street || ''}, ${validationLocalParsed.city || ''}`);
+                                        }).finally(() => setIsAdding(false));
+                                    } else {
+                                        onDetected(validationLocalParsed);
+                                    }
+
+                                    // Reset pour scanner le prochain colis
+                                    resetValidation();
+                                    isValidatedRef.current = false;
+                                    rapidCooldownRef.current = false;
+                                    setScannerState('ready');
+                                    setGuidanceMessage('Arrêt ajouté! Scannez le suivant...');
+                                }}
+                            >
+                                {isAdding ? (
+                                    <ActivityIndicator color="#FFF" size="small" />
+                                ) : (
+                                    <>
+                                        <Check size={20} color="#FFF" weight="bold" />
+                                        <Text style={styles.addButtonText}>Ajouter Arrêt</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            )}
+
+            {/* DEBUG: Raw OCR text overlay - disabled by default, set to true to enable */}
+            {false && __DEV__ && (
+                <View style={styles.debugContainer}>
+                    <Text style={styles.debugTitle}>🔍 RAW OCR:</Text>
+                    <Text style={styles.debugText} numberOfLines={4}>
+                        {debugText || '(aucun texte)'}
+                    </Text>
+                    <Text style={[styles.debugTitle, { marginTop: 6 }]}>📝 PARSED:</Text>
+                    <Text style={[styles.debugText, { color: '#00FFFF' }]} numberOfLines={6}>
+                        {debugParsed || '(rien extrait)'}
+                    </Text>
+                </View>
+            )}
 
             {/* Zoom controls */}
             <View style={styles.zoomControls}>
@@ -783,8 +989,8 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                 </TouchableOpacity>
             </View>
 
-            {/* Confirmation Overlay - Rapid Mode */}
-            {pendingData && rapidMode && (
+            {/* Edit Overlay - Modifier Arrêt */}
+            {showEditOverlay && (
                 <View style={styles.confirmationOverlay}>
                     <View style={styles.confirmationBackdrop} />
                     <KeyboardAvoidingView
@@ -794,8 +1000,11 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                         <View style={styles.confirmationCard}>
                             {/* Header */}
                             <View style={styles.confirmationHeader}>
-                                <Text style={styles.confirmationTitle}>📦 Vérifier le stop</Text>
-                                <TouchableOpacity onPress={handleDismissOverlay} style={styles.confirmationClose}>
+                                <Text style={styles.confirmationTitle}>✏️ Modifier l'arrêt</Text>
+                                <TouchableOpacity
+                                    onPress={() => setShowEditOverlay(false)}
+                                    style={styles.confirmationClose}
+                                >
                                     <X size={24} color="#999" weight="bold" />
                                 </TouchableOpacity>
                             </View>
@@ -881,14 +1090,48 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                             <View style={styles.confirmationActions}>
                                 <TouchableOpacity
                                     style={styles.cancelButton}
-                                    onPress={handleDismissOverlay}
+                                    onPress={() => setShowEditOverlay(false)}
                                     disabled={isAdding}
                                 >
                                     <Text style={styles.cancelButtonText}>Annuler</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.confirmButton, isAdding && styles.confirmButtonDisabled]}
-                                    onPress={handleConfirmAdd}
+                                    onPress={() => {
+                                        // Create edited data
+                                        const editedData: ParsedOCRData = {
+                                            street: editStreet,
+                                            postalCode: editPostalCode,
+                                            city: editCity,
+                                            firstName: editFirstName,
+                                            lastName: editLastName,
+                                            phoneNumber: editPhone,
+                                            companyName: '',
+                                            addressAnnex: '',
+                                            fullAddress: `${editStreet}, ${editPostalCode} ${editCity}`,
+                                            confidence: 1.0,
+                                        };
+
+                                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                        setShowEditOverlay(false);
+
+                                        if (rapidMode && onRapidAdd) {
+                                            setIsAdding(true);
+                                            onRapidAdd(editedData).then(() => {
+                                                setRapidScanCount(c => c + 1);
+                                                setRapidLastAddress(`${editStreet}, ${editCity}`);
+                                                // Reset for next scan
+                                                resetValidation();
+                                                isValidatedRef.current = false;
+                                                rapidCooldownRef.current = false;
+                                                setScannerState('ready');
+                                                setGuidanceMessage('Arrêt ajouté! Scannez le suivant...');
+                                            }).finally(() => setIsAdding(false));
+                                        } else {
+                                            isValidatedRef.current = true;
+                                            onDetected(editedData);
+                                        }
+                                    }}
                                     disabled={isAdding}
                                 >
                                     {isAdding ? (
@@ -896,7 +1139,7 @@ export default function OCRScanner({ isVisible, onDetected, onClose, rapidMode =
                                     ) : (
                                         <>
                                             <Check size={20} color="#FFF" weight="bold" />
-                                            <Text style={styles.confirmButtonText}>Ajouter</Text>
+                                            <Text style={styles.confirmButtonText}>Confirmer</Text>
                                         </>
                                     )}
                                 </TouchableOpacity>
@@ -941,7 +1184,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         width: 24,
         height: 24,
-        borderColor: '#00FF00',
+        borderColor: '#644117', // UPS Brown (secondary)
     },
     cornerTL: {
         top: -2,
@@ -985,6 +1228,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: 'bold',
     },
+    textBoundingBox: {
+        position: 'absolute',
+        borderWidth: 2,
+        borderColor: '#FFB800', // Gold
+        borderRadius: 4,
+        backgroundColor: 'rgba(255, 184, 0, 0.15)', // Gold transparent
+    },
     closeButton: {
         position: 'absolute',
         top: 60,
@@ -1012,7 +1262,7 @@ const styles = StyleSheet.create({
     },
     guidanceContainer: {
         position: 'absolute',
-        top: ROI_TOP + ROI_HEIGHT + 20,
+        top: SEARCH_ROI_TOP + SEARCH_ROI_HEIGHT + 20,
         left: 20,
         right: 20,
         backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -1216,6 +1466,154 @@ const styles = StyleSheet.create({
     confirmButtonText: {
         color: '#FFFFFF',
         fontSize: 16,
+        fontWeight: 'bold',
+    },
+    // Live OCR Display Styles (Phase Flash)
+    liveOcrContainer: {
+        position: 'absolute',
+        bottom: 320,
+        left: 16,
+        right: 16,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        borderRadius: 12,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+    },
+    liveOcrStatusBadge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        backgroundColor: 'rgba(100, 100, 100, 0.8)',
+        marginBottom: 8,
+    },
+    liveOcrStatusValidated: {
+        backgroundColor: 'rgba(0, 180, 0, 0.8)',
+    },
+    liveOcrStatusValidating: {
+        backgroundColor: 'rgba(255, 165, 0, 0.8)',
+    },
+    liveOcrStatusError: {
+        backgroundColor: 'rgba(220, 50, 50, 0.8)',
+    },
+    liveOcrStatusText: {
+        color: '#FFFFFF',
+        fontSize: 11,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+    },
+    liveOcrFields: {
+        gap: 4,
+    },
+    liveOcrField: {
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 14,
+    },
+    liveOcrFieldValidated: {
+        color: '#00FF00',
+        fontWeight: '500',
+    },
+    liveOcrFieldPhone: {
+        color: '#87CEEB',
+    },
+    manualFallbackButton: {
+        marginTop: 10,
+        backgroundColor: 'rgba(255, 107, 0, 0.9)',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    manualFallbackText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    // Result Overlay Styles (new workflow)
+    resultOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingBottom: 40,
+    },
+    resultCard: {
+        backgroundColor: 'rgba(20, 20, 20, 0.95)',
+        marginHorizontal: 16,
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    resultStatusBadge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        marginBottom: 12,
+    },
+    resultStatusSuccess: {
+        backgroundColor: 'rgba(76, 175, 80, 0.9)',
+    },
+    resultStatusError: {
+        backgroundColor: 'rgba(255, 152, 0, 0.9)',
+    },
+    resultStatusText: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: 'bold',
+    },
+    resultDetails: {
+        gap: 10,
+        marginBottom: 16,
+    },
+    resultRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    resultText: {
+        flex: 1,
+        color: '#FFFFFF',
+        fontSize: 15,
+    },
+    resultPhone: {
+        color: '#4CAF50',
+        fontWeight: '600',
+    },
+    resultActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    editButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#444',
+        paddingVertical: 14,
+        borderRadius: 12,
+    },
+    editButtonText: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    addButton: {
+        flex: 2,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#FF6B00',
+        paddingVertical: 14,
+        borderRadius: 12,
+    },
+    addButtonText: {
+        color: '#FFFFFF',
+        fontSize: 15,
         fontWeight: 'bold',
     },
 });

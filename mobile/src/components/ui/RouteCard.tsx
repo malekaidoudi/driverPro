@@ -39,7 +39,7 @@ export const RouteCard: React.FC<RouteCardProps> = ({
     const getStatusIcon = () => {
         switch (status) {
             case 'completed':
-                return <Check size={20} color={colors.secondary} weight="bold" />;
+                return <Check size={20} color={colors.success} weight="bold" />;
             case 'active':
                 return <Clock size={20} color={colors.warning} weight="bold" />;
             default:
@@ -63,7 +63,7 @@ export const RouteCard: React.FC<RouteCardProps> = ({
             case 'active':
                 return colors.warning;
             case 'completed':
-                return colors.secondary;
+                return colors.success;
             default:
                 return colors.textSecondary;
         }

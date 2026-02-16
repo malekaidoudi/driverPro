@@ -424,7 +424,7 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
     }, [autoAddPendingStop]);
 
     const handleOCRDetected = useCallback(async (data: ParsedAddress) => {
-        setOcrScannerVisible(false);
+        // Ne ferme plus le scanner - on reste en mode scan continu
         skipAutocompleteRef.current = true;
         setPredictions([]);
         scanModeRef.current = true; // Mark that we came from OCR scan
@@ -1149,8 +1149,10 @@ export const AddStopBottomSheet = forwardRef<AddStopBottomSheetRef, AddStopBotto
             >
                 <OCRScanner
                     isVisible={ocrScannerVisible}
-                    onDetected={handleOCRDetected}
+                    onDetected={handleOCRClose}
                     onClose={handleOCRClose}
+                    rapidMode={true}
+                    onRapidAdd={handleOCRDetected}
                 />
             </Modal>
 

@@ -250,6 +250,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - ExpoSpeech (14.0.8):
+    - ExpoModulesCore
   - ExpoSpeechRecognition (3.1.0):
     - ExpoModulesCore
   - EXUpdatesInterface (2.0.0):
@@ -2378,6 +2380,29 @@ PODS:
     - ReactNativeDependencies
     - Yoga
   - SSZipArchive (2.4.3)
+  - vision-camera-resize-plugin (3.2.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - VisionCamera
+    - Yoga
   - VisionCamera (4.7.3):
     - VisionCamera/Core (= 4.7.3)
     - VisionCamera/FrameProcessors (= 4.7.3)
@@ -2423,6 +2448,7 @@ DEPENDENCIES:
   - ExpoLinking (from `../node_modules/expo-linking/ios`)
   - ExpoLocation (from `../node_modules/expo-location/ios`)
   - ExpoModulesCore (from `../node_modules/expo-modules-core`)
+  - ExpoSpeech (from `../node_modules/expo-speech/ios`)
   - ExpoSpeechRecognition (from `../node_modules/expo-speech-recognition/ios`)
   - EXUpdatesInterface (from `../node_modules/expo-updates-interface/ios`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
@@ -2502,6 +2528,7 @@ DEPENDENCIES:
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
   - RNWorklets (from `../node_modules/react-native-worklets`)
+  - vision-camera-resize-plugin (from `../node_modules/vision-camera-resize-plugin`)
   - VisionCamera (from `../node_modules/react-native-vision-camera`)
   - VisionCameraTextRecognition (from `../node_modules/react-native-vision-camera-text-recognition`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
@@ -2574,6 +2601,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-location/ios"
   ExpoModulesCore:
     :path: "../node_modules/expo-modules-core"
+  ExpoSpeech:
+    :path: "../node_modules/expo-speech/ios"
   ExpoSpeechRecognition:
     :path: "../node_modules/expo-speech-recognition/ios"
   EXUpdatesInterface:
@@ -2731,6 +2760,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-svg"
   RNWorklets:
     :path: "../node_modules/react-native-worklets"
+  vision-camera-resize-plugin:
+    :path: "../node_modules/vision-camera-resize-plugin"
   VisionCamera:
     :path: "../node_modules/react-native-vision-camera"
   VisionCameraTextRecognition:
@@ -2760,6 +2791,7 @@ SPEC CHECKSUMS:
   ExpoLinking: 8f0aaf69aa56f832913030503b6263dc6f647f37
   ExpoLocation: d5b61cb4970fa982e39ca94246a206a0c3b812ca
   ExpoModulesCore: f3da4f1ab5a8375d0beafab763739dbee8446583
+  ExpoSpeech: d22b56570ccfab5a27112dc9691f1ac83537de26
   ExpoSpeechRecognition: d8dfddcc6d998399f57803a9547aa7a0c63777b9
   EXUpdatesInterface: 5adf50cb41e079c861da6d9b4b954c3db9a50734
   FBLazyVector: e95a291ad2dadb88e42b06e0c5fb8262de53ec12
@@ -2860,6 +2892,7 @@ SPEC CHECKSUMS:
   RNSVG: 31d6639663c249b7d5abc9728dde2041eb2a3c34
   RNWorklets: 2fb11aebe21ea76d0c5456e92d2f23e0cad91a68
   SSZipArchive: fe6a26b2a54d5a0890f2567b5cc6de5caa600aef
+  vision-camera-resize-plugin: 63f2604f36e4201a5cbf5211284c343c8f7ba8c7
   VisionCamera: 0044a94f7489f19e19d5938e97dfc36f4784af3c
   VisionCameraTextRecognition: d183547eed78b904622eac9e6860d0690a0c3f0c
   Yoga: 5934998fbeaef7845dbf698f698518695ab4cd1a

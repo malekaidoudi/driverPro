@@ -18,9 +18,9 @@ export default function Index() {
         if (!user && !inAuthGroup) {
             router.replace('/(auth)/login');
         } else if (user && inAuthGroup) {
-            router.replace('/(tabs)/home');
+            router.replace('/(tabs)/map');
         } else if (user && !inAuthGroup) {
-            router.replace('/(tabs)/home');
+            router.replace('/(tabs)/map');
         }
     }, [user, loading, segments]);
 

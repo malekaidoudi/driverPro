@@ -14,6 +14,8 @@ import {
     DeliveryAttempt,
     DeliveryFailureData,
     DeliveryFailureResult,
+    OCRValidationRequest,
+    OCRValidationResponse,
 } from '../types';
 import Constants from 'expo-constants';
 
@@ -249,6 +251,7 @@ export const servicesApi = {
             params.lng = lng;
         }
         const response = await api.get('/services/geocode/autocomplete', { params });
+        console.log("API RESPONSE:", response.data);
         return response.data.predictions;
     },
 
@@ -299,6 +302,15 @@ export const servicesApi = {
         const response = await api.get('/services/geocode/address', {
             params: { address },
         });
+        return response.data;
+    },
+
+    /**
+     * Validate OCR-detected address via backend (Google Address Validation API)
+     * Used in Phase 2 of hybrid OCR workflow after ML Kit detects stable text
+     */
+    validateOCRAddress: async (request: OCRValidationRequest): Promise<OCRValidationResponse> => {
+        const response = await api.post('/ocr/validate-address', request);
         return response.data;
     },
 };

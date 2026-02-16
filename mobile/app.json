@@ -19,6 +19,12 @@
       "infoPlist": {
         "NSCameraUsageDescription": "UpsDriver needs camera access to scan addresses and labels.",
         "NSSpeechRecognitionUsageDescription": "UpsDriver uses speech recognition to dictate addresses.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "UpsDriver uses your location for turn-by-turn navigation.",
+        "NSLocationWhenInUseUsageDescription": "UpsDriver uses your location to show your position on the map.",
+        "UIBackgroundModes": [
+          "location",
+          "audio"
+        ],
         "LSApplicationQueriesSchemes": [
           "comgooglemaps",
           "waze",
@@ -37,7 +43,24 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ],
+      "intentFilters": [
+        {
+          "action": "android.intent.action.VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "geo"
+            }
+          ],
+          "category": [
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE"
+          ]
+        }
       ]
     },
     "web": {},

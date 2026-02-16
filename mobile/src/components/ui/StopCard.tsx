@@ -45,7 +45,7 @@ export const StopCard: React.FC<StopCardProps> = ({
             case 'high':
                 return colors.warning;
             default:
-                return colors.secondary;
+                return colors.success;
         }
     };
 

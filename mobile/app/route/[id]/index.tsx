@@ -393,6 +393,27 @@ export default function RouteDetailsScreen() {
                 >
                     <View style={{ width: 40, height: 4, backgroundColor: colors.textSecondary, borderRadius: 2, opacity: 0.5 }} />
                 </TouchableOpacity>
+
+                {/* Back Button */}
+                <TouchableOpacity
+                    onPress={() => router.back()}
+                    style={{
+                        position: 'absolute',
+                        top: Platform.OS === 'ios' ? 16 : 12,
+                        left: 16,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: colors.background,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 20,
+                        zIndex: 10,
+                    }}
+                >
+                    <ArrowLeft size={18} color={colors.textPrimary} weight="bold" />
+                    <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600', marginLeft: 6 }}>Retour</Text>
+                </TouchableOpacity>
+
                 {/* Search Input Header */}
                 <TouchableOpacity
                     onPress={() => setSearchOverlayVisible(true)}

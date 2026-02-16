@@ -54,6 +54,32 @@ const DEFAULT_CONFIG: TrackerConfig = {
 };
 
 // =============================================================================
+// INTELLIGENT ROI DETECTION CONFIG
+// =============================================================================
+
+const ROI_FILTER_CONFIG = {
+  // Étape 1: Filtrage des blocs parasites
+  minBlockArea: 400,           // Ignorer blocs < 20x20 px
+  minBlockWidth: 15,           // Largeur min
+  minBlockHeight: 8,           // Hauteur min
+  maxAspectRatio: 25,          // Ignorer blocs trop étirés (ex: lignes fines)
+  minAspectRatio: 0.05,        // Ignorer blocs trop verticaux
+
+  // Étape 2: Clustering spatial
+  verticalClusterThreshold: 80, // Distance Y max pour grouper des blocs
+  minClusterBlocks: 2,          // Min blocs pour former un cluster valide
+
+  // Étape 3: Fallback
+  fallbackWidthPercent: 0.85,   // Largeur du rectangle central
+  fallbackHeightPercent: 0.25,  // Hauteur du rectangle central
+  fallbackYOffsetPercent: 0.35, // Position Y (35% depuis le haut)
+
+  // ROI taille fixe (en pixels frame)
+  fixedROIWidth: 350,           // Largeur fixe du ROI
+  fixedROIHeight: 600,          // Hauteur fixe du ROI
+};
+
+// =============================================================================
 // KALMAN FILTER 1D
 // =============================================================================
 
@@ -143,23 +169,228 @@ class BoxTracker {
 // UTILITY FUNCTIONS
 // =============================================================================
 
-function computeBoundingBoxFromBlocks(
-  blocks: TextBlock[],
-  frameWidth: number,
-  frameHeight: number
-): BoundingBox | null {
-  const validBlocks = blocks.filter(
-    (b) => b.bounds && b.bounds.width > 0 && b.bounds.height > 0
+// =============================================================================
+// ÉTAPE 1: Filtrer les blocs parasites
+// =============================================================================
+
+function filterParasiteBlocks(blocks: TextBlock[]): TextBlock[] {
+  return blocks.filter((block) => {
+    if (!block.bounds) return false;
+
+    const { width, height } = block.bounds;
+    const area = width * height;
+    const aspectRatio = width / Math.max(height, 1);
+
+    // Filtrer par taille minimum
+    if (area < ROI_FILTER_CONFIG.minBlockArea) return false;
+    if (width < ROI_FILTER_CONFIG.minBlockWidth) return false;
+    if (height < ROI_FILTER_CONFIG.minBlockHeight) return false;
+
+    // Filtrer par ratio largeur/hauteur (éviter lignes fines ou blocs trop verticaux)
+    if (aspectRatio > ROI_FILTER_CONFIG.maxAspectRatio) return false;
+    if (aspectRatio < ROI_FILTER_CONFIG.minAspectRatio) return false;
+
+    // Filtrer blocs avec très peu de texte (probablement du bruit)
+    if (block.text && block.text.length < 2) return false;
+
+    return true;
+  });
+}
+
+// =============================================================================
+// ÉTAPE 2: Clustering spatial par position Y
+// =============================================================================
+
+interface BlockCluster {
+  blocks: TextBlock[];
+  minY: number;
+  maxY: number;
+  totalArea: number;
+  totalChars: number;
+}
+
+function clusterBlocksByY(blocks: TextBlock[]): BlockCluster[] {
+  if (blocks.length === 0) return [];
+
+  // Trier par Y (position verticale)
+  const sorted = [...blocks].sort((a, b) => {
+    const aY = a.bounds?.y || 0;
+    const bY = b.bounds?.y || 0;
+    return aY - bY;
+  });
+
+  const clusters: BlockCluster[] = [];
+  let currentCluster: BlockCluster = {
+    blocks: [sorted[0]],
+    minY: sorted[0].bounds!.y,
+    maxY: sorted[0].bounds!.y + sorted[0].bounds!.height,
+    totalArea: sorted[0].bounds!.width * sorted[0].bounds!.height,
+    totalChars: sorted[0].text?.length || 0,
+  };
+
+  for (let i = 1; i < sorted.length; i++) {
+    const block = sorted[i];
+    const blockY = block.bounds!.y;
+    const blockBottom = blockY + block.bounds!.height;
+    const blockArea = block.bounds!.width * block.bounds!.height;
+    const blockChars = block.text?.length || 0;
+
+    // Distance verticale entre le bas du cluster et le haut du bloc
+    const verticalGap = blockY - currentCluster.maxY;
+
+    if (verticalGap <= ROI_FILTER_CONFIG.verticalClusterThreshold) {
+      // Ajouter au cluster actuel
+      currentCluster.blocks.push(block);
+      currentCluster.maxY = Math.max(currentCluster.maxY, blockBottom);
+      currentCluster.totalArea += blockArea;
+      currentCluster.totalChars += blockChars;
+    } else {
+      // Nouveau cluster
+      clusters.push(currentCluster);
+      currentCluster = {
+        blocks: [block],
+        minY: blockY,
+        maxY: blockBottom,
+        totalArea: blockArea,
+        totalChars: blockChars,
+      };
+    }
+  }
+
+  // Ajouter le dernier cluster
+  clusters.push(currentCluster);
+
+  return clusters;
+}
+
+function selectBestCluster(clusters: BlockCluster[], tapPoint?: { x: number; y: number } | null): BlockCluster | null {
+  if (clusters.length === 0) return null;
+
+  // Si tap point fourni, sélectionner le cluster le plus proche
+  if (tapPoint) {
+    let closestCluster: BlockCluster | null = null;
+    let minDistance = Infinity;
+
+    for (const cluster of clusters) {
+      // Calculer le centre du cluster
+      const clusterCenterY = (cluster.minY + cluster.maxY) / 2;
+
+      // Calculer le centre X du cluster
+      let minX = Infinity, maxX = -Infinity;
+      for (const block of cluster.blocks) {
+        if (block.bounds) {
+          minX = Math.min(minX, block.bounds.x);
+          maxX = Math.max(maxX, block.bounds.x + block.bounds.width);
+        }
+      }
+      const clusterCenterX = (minX + maxX) / 2;
+
+      // Distance euclidienne
+      const distance = Math.sqrt(
+        Math.pow(tapPoint.x - clusterCenterX, 2) +
+        Math.pow(tapPoint.y - clusterCenterY, 2)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestCluster = cluster;
+      }
+    }
+
+    if (__DEV__ && closestCluster) {
+      console.log(`[ROI] Tap selected cluster: ${closestCluster.blocks.length} blocks, distance=${Math.round(minDistance)}`);
+    }
+
+    return closestCluster;
+  }
+
+  // Sinon, sélection automatique
+  // Filtrer clusters avec assez de blocs
+  const validClusters = clusters.filter(
+    (c) => c.blocks.length >= ROI_FILTER_CONFIG.minClusterBlocks
   );
 
-  if (validBlocks.length === 0) return null;
+  if (validClusters.length === 0) {
+    // Fallback: prendre le plus gros cluster même s'il n'a qu'un bloc
+    return clusters.reduce((best, c) =>
+      c.totalArea > best.totalArea ? c : best
+    );
+  }
 
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
+  // Scorer chaque cluster: pondérer surface + caractères
+  return validClusters.reduce((best, cluster) => {
+    const bestScore = best.totalArea * 0.5 + best.totalChars * 10;
+    const clusterScore = cluster.totalArea * 0.5 + cluster.totalChars * 10;
+    return clusterScore > bestScore ? cluster : best;
+  });
+}
 
-  for (const block of validBlocks) {
+// =============================================================================
+// ÉTAPE 3: Fallback rectangle central
+// =============================================================================
+
+function getFallbackROI(frameWidth: number, frameHeight: number): BoundingBox {
+  const width = Math.round(frameWidth * ROI_FILTER_CONFIG.fallbackWidthPercent);
+  const height = Math.round(frameHeight * ROI_FILTER_CONFIG.fallbackHeightPercent);
+  const x = Math.round((frameWidth - width) / 2);
+  const y = Math.round(frameHeight * ROI_FILTER_CONFIG.fallbackYOffsetPercent);
+
+  return { x, y, width, height };
+}
+
+// =============================================================================
+// MAIN: Compute intelligent ROI from blocks
+// =============================================================================
+
+// Retourne: { clusters, selectedCluster, fixedROI }
+interface ClusterResult {
+  clusters: BlockCluster[];
+  selectedCluster: BlockCluster | null;
+  fixedROI: BoundingBox;
+}
+
+function computeClusterAndROI(
+  blocks: TextBlock[],
+  frameWidth: number,
+  frameHeight: number,
+  tapPoint?: { x: number; y: number } | null
+): ClusterResult {
+  const fallbackROI = getFallbackROI(frameWidth, frameHeight);
+
+  // Étape 1: Filtrer les blocs parasites
+  const filteredBlocks = filterParasiteBlocks(blocks);
+
+  if (__DEV__ && blocks.length > 0) {
+    console.log(`[ROI] Filtered: ${filteredBlocks.length}/${blocks.length} blocks kept`);
+  }
+
+  if (filteredBlocks.length === 0) {
+    if (__DEV__) console.log('[ROI] No valid blocks → using fallback ROI');
+    return { clusters: [], selectedCluster: null, fixedROI: fallbackROI };
+  }
+
+  // Étape 2: Clustering spatial
+  const clusters = clusterBlocksByY(filteredBlocks);
+
+  if (__DEV__) {
+    console.log(`[ROI] Found ${clusters.length} clusters`);
+  }
+
+  // Étape 3: Sélectionner le meilleur cluster (ou celui proche du tap)
+  const selectedCluster = selectBestCluster(clusters, tapPoint);
+
+  if (!selectedCluster) {
+    if (__DEV__) console.log('[ROI] No valid cluster → using fallback ROI');
+    return { clusters, selectedCluster: null, fixedROI: fallbackROI };
+  }
+
+  if (__DEV__) {
+    console.log(`[ROI] Selected cluster: ${selectedCluster.blocks.length} blocks, ${selectedCluster.totalChars} chars`);
+  }
+
+  // Calculer le CENTRE du cluster sélectionné
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const block of selectedCluster.blocks) {
     const b = block.bounds!;
     minX = Math.min(minX, b.x);
     minY = Math.min(minY, b.y);
@@ -167,18 +398,42 @@ function computeBoundingBoxFromBlocks(
     maxY = Math.max(maxY, b.y + b.height);
   }
 
-  // Clamp to frame bounds
-  minX = Math.max(0, minX);
-  minY = Math.max(0, minY);
-  maxX = Math.min(frameWidth, maxX);
-  maxY = Math.min(frameHeight, maxY);
+  const clusterCenterX = (minX + maxX) / 2;
+  const clusterCenterY = (minY + maxY) / 2;
 
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY,
+  // ROI de taille FIXE centré sur le cluster
+  const roiWidth = ROI_FILTER_CONFIG.fixedROIWidth;
+  const roiHeight = ROI_FILTER_CONFIG.fixedROIHeight;
+
+  let roiX = clusterCenterX - roiWidth / 2;
+  let roiY = clusterCenterY - roiHeight / 2;
+
+  // Clamp aux limites de la frame
+  roiX = Math.max(0, Math.min(frameWidth - roiWidth, roiX));
+  roiY = Math.max(0, Math.min(frameHeight - roiHeight, roiY));
+
+  const fixedROI: BoundingBox = {
+    x: Math.round(roiX),
+    y: Math.round(roiY),
+    width: roiWidth,
+    height: roiHeight,
   };
+
+  if (__DEV__) {
+    console.log(`[ROI] Fixed ROI centered at (${Math.round(clusterCenterX)}, ${Math.round(clusterCenterY)})`);
+  }
+
+  return { clusters, selectedCluster, fixedROI };
+}
+
+// Legacy function for compatibility
+function computeBoundingBoxFromBlocks(
+  blocks: TextBlock[],
+  frameWidth: number,
+  frameHeight: number
+): BoundingBox | null {
+  const result = computeClusterAndROI(blocks, frameWidth, frameHeight);
+  return result.fixedROI;
 }
 
 function addPadding(
@@ -241,17 +496,31 @@ export function useROITracker(config: Partial<TrackerConfig> = {}) {
   const lastChangeTimeRef = useRef<number>(Date.now());
   const isStableRef = useRef<boolean>(false);
 
+  // Tap selection: store user tap point (in frame coordinates)
+  const userTapPointRef = useRef<{ x: number; y: number } | null>(null);
+  // Store all clusters for tap selection
+  const lastClustersRef = useRef<BlockCluster[]>([]);
+
   const updateROI = useCallback(
     (
       textBlocks: TextBlock[],
       frameWidth: number,
       frameHeight: number
     ): ROIState => {
-      // Compute bounding box from detected text blocks
-      const rawBox = computeBoundingBoxFromBlocks(textBlocks, frameWidth, frameHeight);
+      // Compute cluster and fixed ROI using intelligent detection
+      const result = computeClusterAndROI(
+        textBlocks,
+        frameWidth,
+        frameHeight,
+        userTapPointRef.current
+      );
+
+      // Store clusters for potential tap selection
+      lastClustersRef.current = result.clusters;
+
+      const rawBox = result.fixedROI;
 
       if (!rawBox) {
-        // No text detected, keep last ROI but mark as unstable
         return {
           roi: lastROIRef.current,
           isStable: false,
@@ -259,28 +528,8 @@ export function useROITracker(config: Partial<TrackerConfig> = {}) {
         };
       }
 
-      // Check minimum size
-      if (
-        rawBox.width < mergedConfig.minWidth ||
-        rawBox.height < mergedConfig.minHeight
-      ) {
-        return {
-          roi: lastROIRef.current,
-          isStable: false,
-          confidence: 0.2,
-        };
-      }
-
-      // Add padding
-      const paddedBox = addPadding(
-        rawBox,
-        mergedConfig.paddingPercent,
-        frameWidth,
-        frameHeight
-      );
-
       // Smooth with Kalman filter
-      const smoothedBox = trackerRef.current.update(paddedBox);
+      const smoothedBox = trackerRef.current.update(rawBox);
 
       // Check stability
       const now = Date.now();
@@ -300,8 +549,10 @@ export function useROITracker(config: Partial<TrackerConfig> = {}) {
 
       lastROIRef.current = smoothedBox;
 
-      // Compute confidence
-      const confidence = scoreTextBlocks(textBlocks);
+      // Compute confidence based on selected cluster
+      const confidence = result.selectedCluster
+        ? scoreTextBlocks(result.selectedCluster.blocks)
+        : 0;
 
       return {
         roi: smoothedBox,
@@ -317,6 +568,8 @@ export function useROITracker(config: Partial<TrackerConfig> = {}) {
     lastROIRef.current = null;
     lastChangeTimeRef.current = Date.now();
     isStableRef.current = false;
+    userTapPointRef.current = null;
+    lastClustersRef.current = [];
   }, []);
 
   const getCurrentROI = useCallback((): BoundingBox | null => {
@@ -327,11 +580,32 @@ export function useROITracker(config: Partial<TrackerConfig> = {}) {
     return isStableRef.current;
   }, []);
 
+  // Set tap point for cluster selection (in FRAME coordinates)
+  const setTapPoint = useCallback((x: number, y: number) => {
+    userTapPointRef.current = { x, y };
+    // Reset stability when user taps to select new cluster
+    isStableRef.current = false;
+    lastChangeTimeRef.current = Date.now();
+    if (__DEV__) {
+      console.log(`[ROI] User tap at (${Math.round(x)}, ${Math.round(y)}) - will select nearest cluster`);
+    }
+  }, []);
+
+  // Clear tap point (return to auto-selection)
+  const clearTapPoint = useCallback(() => {
+    userTapPointRef.current = null;
+    if (__DEV__) {
+      console.log('[ROI] Tap point cleared - returning to auto cluster selection');
+    }
+  }, []);
+
   return {
     updateROI,
     reset,
     getCurrentROI,
     isStable,
+    setTapPoint,
+    clearTapPoint,
   };
 }
 
