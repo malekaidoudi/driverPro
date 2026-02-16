@@ -1,0 +1,23 @@
+Setup initial: Structure des dossiers backend et frontend
+
+Configuration de la base de données PostgreSQL/Supabase avec le schéma SQL complet
+
+Backend: Configuration FastAPI (core, security, config)
+
+Backend: Implémentation des endpoints CRUD (routes, stops)
+
+Backend: Service d'optimisation avec Google OR-Tools
+
+Backend: Services externes (Google Maps, OCR, Speech-to-Text)
+
+Frontend: Configuration Expo avec NativeWind et dépendances
+
+Frontend: Système de thème (light/dark) et contextes
+
+Frontend: Écrans principaux et navigation
+
+Frontend: Intégration des cartes et géocodage
+
+Frontend: BottomSheets et composants UI premium
+
+Frontend: Fonctionnalités avancées (OCR, Speech, Haptics)
