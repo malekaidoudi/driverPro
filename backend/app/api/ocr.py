@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from app.services.address_validation_service import (
     validate_ocr_address,
-    SPACY_AVAILABLE
+    is_spacy_available,
+    is_bert_available
 )
 
 router = APIRouter(prefix="/ocr", tags=["OCR"])
@@ -104,7 +105,7 @@ async def validate_address(request: OCRValidationRequest) -> OCRValidationRespon
     
     # Log incoming request
     text_preview = request.raw_text[:60].replace('\n', ' ')
-    ocr_logger.info(f"📥 REQUEST | len={len(request.raw_text)} | spacy={SPACY_AVAILABLE} | \"{text_preview}...\"")
+    ocr_logger.info(f"📥 REQUEST | len={len(request.raw_text)} | bert={is_bert_available()} | spacy={is_spacy_available()} | \"{text_preview}...\"")
     
     if not request.raw_text or len(request.raw_text.strip()) < 5:
         ocr_logger.warning("❌ REJECTED | raw_text too short")
@@ -177,5 +178,6 @@ async def ocr_health():
     return {
         "status": "ok",
         "service": "ocr",
-        "spacy_available": SPACY_AVAILABLE
+        "spacy_available": is_spacy_available(),
+        "bert_available": is_bert_available()
     }
